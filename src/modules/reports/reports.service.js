@@ -2,34 +2,72 @@ const db = require("../../config/db");
 const { generateExcelReport } = require("./reports.export.service");
 
 exports.getClaimsReport = async (filters) => {
-  let query = `SELECT 
+
+  let query = `
+  SELECT
+    bill_type,
+    district_name,
+    sr_no,
+    branch_name,
     warehouse_name,
-    month,
-    financial_year,
-    status,
-    rent_bill_amount
+    pan_card_holder,
+    pan_card_number,
+    warehouse_no AS gdn_no,
+    deposit_name,
+    commodity,
+    CONCAT(month, ' ', financial_year) AS period,
+    rent_bill_amount,
+    total_jv_amount,
+    actual_passed_amount,
+    tds,
+    emi_amount,
+    deduction_20_percent,
+    penalty,
+    medicine,
+    emi_fdr_interest,
+    gain_shortage_deducton,
+    stock_shortage_deduction,
+    bank_solvancy,
+    insurance,
+    other_deduction_amount,
+    pay_to_jvs_amount,
+    payment_by,
+    payment_date,
+    qtr,
+    remarks
   FROM claims
-  WHERE 1=1`;
+  WHERE 1=1
+  `;
 
   const params = [];
 
+  if (filters.district_name) {
+    query += ` AND district_name = ?`;
+    params.push(filters.district_name);
+  }
+
+  if (filters.branch_name) {
+    query += ` AND branch_name = ?`;
+    params.push(filters.branch_name);
+  }
+
+  if (filters.warehouse_name) {
+    query += ` AND warehouse_name = ?`;
+    params.push(filters.warehouse_name);
+  }
+
   if (filters.month) {
-    query += " AND month = ?";
+    query += ` AND month = ?`;
     params.push(filters.month);
   }
 
   if (filters.financial_year) {
-    query += " AND financial_year = ?";
+    query += ` AND financial_year = ?`;
     params.push(filters.financial_year);
   }
 
-  if (filters.warehouse_name) {
-    query += " AND warehouse_name = ?";
-    params.push(filters.warehouse_name);
-  }
-
   if (filters.status) {
-    query += " AND status = ?";
+    query += ` AND status = ?`;
     params.push(filters.status);
   }
 

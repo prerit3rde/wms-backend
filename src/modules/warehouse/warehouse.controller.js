@@ -15,7 +15,7 @@ exports.createWarehouse = async (req, res) => {
       req.body,
       req.user.id
     );
-
+    // console.log("Warehouse created with ID:", req.user.id);
     res.status(201).json({
       message: "Warehouse created successfully",
       warehouseId: result.insertId,

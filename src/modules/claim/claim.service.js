@@ -3,32 +3,32 @@ const db = require("../../config/db");
 /* ================= CREATE ================= */
 exports.createClaim = async (data) => {
 
-const totalJV = Number(data.total_jv_amount || 0);
-const actualPassed = Number(data.actual_passed_amount || 0);
+  const totalJV = Number(data.total_jv_amount || 0);
+  const actualPassed = Number(data.actual_passed_amount || 0);
 
-const tds = totalJV * 0.10;
-const deduction20 = totalJV * 0.20;
+  const tds = totalJV * 0.10;
+  const deduction20 = totalJV * 0.20;
 
-const payToJVS =
-actualPassed -
-tds -
-deduction20;
+  const payToJVS =
+    actualPassed -
+    tds -
+    deduction20;
 
-const payload = {
-...data,
-status: "Pending",
+  const payload = {
+    ...data,
+    status: "Pending",
 
-tds,
-deduction_20_percent: deduction20,
-pay_to_jvs_amount: payToJVS
-};
+    tds,
+    deduction_20_percent: deduction20,
+    pay_to_jvs_amount: payToJVS
+  };
 
-const [result] = await db.query(
-`INSERT INTO claims SET ?`,
-payload
-);
+  const [result] = await db.query(
+    `INSERT INTO claims SET ?`,
+    payload
+  );
 
-return result.insertId;
+  return result.insertId;
 
 };
 
@@ -239,8 +239,15 @@ exports.updateClaim = async (id, data) => {
     tds -
     deduction20;
 
+  /* remove fields not in claims table */
+  const {
+    approved_by_name,
+    rejected_by_name,
+    ...cleanData
+  } = data;
+
   const payload = {
-    ...data,
+    ...cleanData,
     tds,
     deduction_20_percent: deduction20,
     pay_to_jvs_amount: payToJVS
@@ -261,7 +268,6 @@ exports.updateClaim = async (id, data) => {
   );
 
   return updated[0];
-
 };
 
 /* ================= DELETE ================= */

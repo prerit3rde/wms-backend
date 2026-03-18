@@ -12,13 +12,12 @@ exports.createWarehouse = async (data, userId) => {
       warehouse_owner_name,
       warehouse_type,
       warehouse_no,
-      sr_no,
+      gst_no,
       pan_card_holder,
       pan_card_number,
-      deposit_name,
       created_by
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
   const values = [
@@ -28,10 +27,9 @@ exports.createWarehouse = async (data, userId) => {
     data.warehouse_owner_name,
     data.warehouse_type,
     data.warehouse_no,
-    data.sr_no,
+    data.gst_no,
     data.pan_card_holder,
     data.pan_card_number,
-    data.deposit_name,
     userId,
   ];
 
@@ -217,10 +215,9 @@ exports.updateWarehouse = async (id, data) => {
       warehouse_owner_name = ?,
       warehouse_type = ?,
       warehouse_no = ?,
-      sr_no = ?,
+      gst_no = ?,
       pan_card_holder = ?,
-      pan_card_number = ?,
-      deposit_name = ?
+      pan_card_number = ?
     WHERE id = ? AND is_deleted = FALSE
   `;
 
@@ -231,10 +228,9 @@ exports.updateWarehouse = async (id, data) => {
     data.warehouse_owner_name,
     data.warehouse_type,
     data.warehouse_no,
-    data.sr_no,
+    data.gst_no,
     data.pan_card_holder,
     data.pan_card_number,
-    data.deposit_name,
     id,
   ];
 
