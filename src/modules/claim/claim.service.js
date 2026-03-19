@@ -239,8 +239,13 @@ exports.updateClaim = async (id, data) => {
     tds -
     deduction20;
 
-  /* remove fields not in claims table */
+  /* remove fields not in claims table or shouldn't be updated */
   const {
+    id: claimId,
+    created_at,
+    updated_at,
+    approved_at,
+    rejected_at,
     approved_by_name,
     rejected_by_name,
     ...cleanData
