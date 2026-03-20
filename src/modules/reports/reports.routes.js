@@ -3,12 +3,12 @@ const router = express.Router();
 const controller = require("./reports.controller");
 const verifyToken = require("../../middlewares/auth.middleware")
 
-router.get("/claims", verifyToken, controller.getClaimsReport);
+router.get("/payments", verifyToken, controller.getPaymentsReport);
 
 router.post(
-    "/claims/generate",
+    "/payments/generate",
     verifyToken,
-    controller.generateClaimsReport
+    controller.generatePaymentsReport
 );
 
 router.get("/history", verifyToken, controller.getReportHistory);

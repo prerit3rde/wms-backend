@@ -1,12 +1,12 @@
-const claimService = require("./claim.service");
-const { createClaimSchema } = require("./claim.validation");
+const paymentService = require("./payment.service");
+const { createPaymentSchema } = require("./payment.validation");
 
 /* ================= CREATE ================= */
 
-exports.createClaim = async (req, res) => {
+exports.createPayment = async (req, res) => {
   try {
 
-    const { error } = createClaimSchema.validate(req.body);
+    const { error } = createPaymentSchema.validate(req.body);
     if (error) {
       return res.status(400).json({
         success: false,
@@ -14,18 +14,18 @@ exports.createClaim = async (req, res) => {
       });
     }
 
-    const id = await claimService.createClaim(req.body);
+    const id = await paymentService.createPayment(req.body);
 
     return res.status(201).json({
       success: true,
-      message: "Claim added successfully",
+      message: "Payment added successfully",
       data: { id }
     });
 
   } catch (err) {
     return res.status(500).json({
       success: false,
-      message: "Failed to create claim",
+      message: "Failed to create payment",
       error: err.message
     });
   }
@@ -34,9 +34,9 @@ exports.createClaim = async (req, res) => {
 /* ================= GET ALL ================= */
 
 /* ================= FILTER OPTIONS ================= */
-exports.getClaimFilters = async (req, res) => {
+exports.getPaymentFilters = async (req, res) => {
   try {
-    const data = await claimService.getClaimFilters();
+    const data = await paymentService.getPaymentFilters();
     res.json({ success: true, data });
   } catch (error) {
     res.status(500).json({
@@ -47,9 +47,9 @@ exports.getClaimFilters = async (req, res) => {
 };
 
 /* ================= GET ALL ================= */
-exports.getAllClaims = async (req, res) => {
+exports.getAllPayments = async (req, res) => {
   try {
-    const result = await claimService.getAllClaims(req.query);
+    const result = await paymentService.getAllPayments(req.query);
 
     return res.status(200).json({
       success: true,
@@ -59,22 +59,22 @@ exports.getAllClaims = async (req, res) => {
   } catch (err) {
     return res.status(500).json({
       success: false,
-      message: "Failed to fetch claims",
+      message: "Failed to fetch payments",
       error: err.message,
     });
   }
 };
 /* ================= GET ONE ================= */
 
-exports.getClaim = async (req, res) => {
+exports.getPayment = async (req, res) => {
   try {
 
-    const data = await claimService.getClaimById(req.params.id);
+    const data = await paymentService.getPaymentById(req.params.id);
 
     if (!data) {
       return res.status(404).json({
         success: false,
-        message: "No claim found with this ID"
+        message: "No payment found with this ID"
       });
     }
 
@@ -86,7 +86,7 @@ exports.getClaim = async (req, res) => {
   } catch (err) {
     return res.status(500).json({
       success: false,
-      message: "Failed to fetch claim",
+      message: "Failed to fetch payment",
       error: err.message
     });
   }
@@ -94,30 +94,30 @@ exports.getClaim = async (req, res) => {
 
 /* ================= UPDATE ================= */
 
-exports.updateClaim = async (req, res) => {
+exports.updatePayment = async (req, res) => {
   try {
-    const updatedClaim = await claimService.updateClaim(
+    const updatedPayment = await paymentService.updatePayment(
       req.params.id,
       req.body
     );
 
-    if (!updatedClaim) {
+    if (!updatedPayment) {
       return res.status(400).json({
         success: false,
-        message: "Claim not found or already processed"
+        message: "Payment not found or already processed"
       });
     }
 
     return res.status(200).json({
       success: true,
-      message: "Claim updated successfully",
-      data: updatedClaim   // 🔥 RETURN UPDATED CLAIM
+      message: "Payment updated successfully",
+      data: updatedPayment   // 🔥 RETURN UPDATED PAYMENT
     });
 
   } catch (err) {
     return res.status(500).json({
       success: false,
-      message: "Failed to update claim",
+      message: "Failed to update payment",
       error: err.message
     });
   }
@@ -125,27 +125,27 @@ exports.updateClaim = async (req, res) => {
 
 /* ================= DELETE ================= */
 
-exports.deleteClaim = async (req, res) => {
+exports.deletePayment = async (req, res) => {
   try {
 
-    const result = await claimService.deleteClaim(req.params.id);
+    const result = await paymentService.deletePayment(req.params.id);
 
     if (!result || result.affectedRows === 0) {
       return res.status(400).json({
         success: false,
-        message: "Claim not found or already processed"
+        message: "Payment not found or already processed"
       });
     }
 
     return res.status(200).json({
       success: true,
-      message: "Claim deleted successfully"
+      message: "Payment deleted successfully"
     });
 
   } catch (err) {
     return res.status(500).json({
       success: false,
-      message: "Failed to delete claim",
+      message: "Failed to delete payment",
       error: err.message
     });
   }
@@ -153,29 +153,29 @@ exports.deleteClaim = async (req, res) => {
 
 /* ================= APPROVE ================= */
 
-exports.approveClaim = async (req, res) => {
+exports.approvePayment = async (req, res) => {
   try {
 
     const userId = req.user.id; // 🔥 get admin id from token
 
-    const result = await claimService.approveClaim(req.params.id, userId);
+    const result = await paymentService.approvePayment(req.params.id, userId);
 
     if (!result || result.affectedRows === 0) {
       return res.status(400).json({
         success: false,
-        message: "Claim not found or already processed"
+        message: "Payment not found or already processed"
       });
     }
 
     return res.status(200).json({
       success: true,
-      message: "Claim approved successfully"
+      message: "Payment approved successfully"
     });
 
   } catch (err) {
     return res.status(500).json({
       success: false,
-      message: "Failed to approve claim",
+      message: "Failed to approve payment",
       error: err.message
     });
   }
@@ -183,29 +183,29 @@ exports.approveClaim = async (req, res) => {
 
 /* ================= REJECT ================= */
 
-exports.rejectClaim = async (req, res) => {
+exports.rejectPayment = async (req, res) => {
   try {
 
     const userId = req.user.id; // 🔥 get admin id from token
 
-    const result = await claimService.rejectClaim(req.params.id, userId);
+    const result = await paymentService.rejectPayment(req.params.id, userId);
 
     if (!result || result.affectedRows === 0) {
       return res.status(400).json({
         success: false,
-        message: "Claim not found or already processed"
+        message: "Payment not found or already processed"
       });
     }
 
     return res.status(200).json({
       success: true,
-      message: "Claim rejected successfully"
+      message: "Payment rejected successfully"
     });
 
   } catch (err) {
     return res.status(500).json({
       success: false,
-      message: "Failed to reject claim",
+      message: "Failed to reject payment",
       error: err.message
     });
   }

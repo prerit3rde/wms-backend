@@ -1,6 +1,6 @@
 const Joi = require("joi");
 
-exports.createClaimSchema = Joi.object({
+exports.createPaymentSchema = Joi.object({
 
 /* ===============================
 Warehouse Snapshot

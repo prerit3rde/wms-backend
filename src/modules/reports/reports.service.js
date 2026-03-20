@@ -1,7 +1,7 @@
 const db = require("../../config/db");
 const { generateExcelReport } = require("./reports.export.service");
 
-exports.getClaimsReport = async (filters) => {
+exports.getPaymentsReport = async (filters) => {
 
   let query = `
   SELECT
@@ -35,7 +35,7 @@ exports.getClaimsReport = async (filters) => {
     payment_date,
     qtr,
     remarks
-  FROM claims
+  FROM payments
   WHERE 1=1
   `;
 
@@ -76,10 +76,10 @@ exports.getClaimsReport = async (filters) => {
   return rows;
 };
 
-exports.generateClaimsReport = async (filters, userId) => {
-  const data = await exports.getClaimsReport(filters);
+exports.generatePaymentsReport = async (filters, userId) => {
+  const data = await exports.getPaymentsReport(filters);
 
-  const reportName = "claims-report";
+  const reportName = "payments-report";
 
   const file = await generateExcelReport(data, reportName);
 

@@ -1,7 +1,7 @@
 const db = require("../../config/db");
 
 /* ================= CREATE ================= */
-exports.createClaim = async (data) => {
+exports.createPayment = async (data) => {
 
   const totalJV = Number(data.total_jv_amount || 0);
   const actualPassed = Number(data.actual_passed_amount || 0);
@@ -24,7 +24,7 @@ exports.createClaim = async (data) => {
   };
 
   const [result] = await db.query(
-    `INSERT INTO claims SET ?`,
+    `INSERT INTO payments SET ?`,
     payload
   );
 
@@ -33,26 +33,26 @@ exports.createClaim = async (data) => {
 };
 
 /* ================= FILTER OPTIONS ================= */
-exports.getClaimFilters = async () => {
+exports.getPaymentFilters = async () => {
   const [districts] = await db.query(
-    `SELECT DISTINCT district_name FROM claims`
+    `SELECT DISTINCT district_name FROM payments`
   );
 
   const [branches] = await db.query(
-    `SELECT DISTINCT branch_name, district_name FROM claims`
+    `SELECT DISTINCT branch_name, district_name FROM payments`
   );
 
   const [warehouses] = await db.query(
     `SELECT DISTINCT warehouse_name, branch_name, district_name, warehouse_type 
-     FROM claims`
+     FROM payments`
   );
 
   const [types] = await db.query(
-    `SELECT DISTINCT warehouse_type FROM claims`
+    `SELECT DISTINCT warehouse_type FROM payments`
   );
 
   const [statuses] = await db.query(
-    `SELECT DISTINCT status FROM claims`
+    `SELECT DISTINCT status FROM payments`
   );
 
   return {
@@ -65,7 +65,7 @@ exports.getClaimFilters = async () => {
 };
 
 /* ================= GET ALL (Pagination + Filter) ================= */
-exports.getAllClaims = async (queryParams) => {
+exports.getAllPayments = async (queryParams) => {
   const page = Number(queryParams.page) || 1;
   const limit = Number(queryParams.limit) || 10;
   const offset = (page - 1) * limit;
@@ -79,7 +79,7 @@ exports.getAllClaims = async (queryParams) => {
   const from_date = queryParams.from_date || "";
   const to_date = queryParams.to_date || "";
 
-  let query = `SELECT * FROM claims WHERE 1=1`;
+  let query = `SELECT * FROM payments WHERE 1=1`;
   let values = [];
 
   /* SEARCH */
@@ -152,7 +152,7 @@ exports.getAllClaims = async (queryParams) => {
   const [rows] = await db.query(query, values);
 
   /* COUNT QUERY */
-  let countQuery = `SELECT COUNT(*) as total FROM claims WHERE 1=1`;
+  let countQuery = `SELECT COUNT(*) as total FROM payments WHERE 1=1`;
   let countValues = [];
 
   if (search) {
@@ -207,14 +207,14 @@ exports.getAllClaims = async (queryParams) => {
 };
 
 /* ================= GET ONE ================= */
-exports.getClaimById = async (id) => {
+exports.getPaymentById = async (id) => {
   const [rows] = await db.query(
     `
     SELECT 
       c.*,
       u1.name AS approved_by_name,
       u2.name AS rejected_by_name
-    FROM claims c
+    FROM payments c
     LEFT JOIN users u1 ON c.approved_by = u1.id
     LEFT JOIN users u2 ON c.rejected_by = u2.id
     WHERE c.id = ?
@@ -226,7 +226,7 @@ exports.getClaimById = async (id) => {
 };
 
 /* ================= UPDATE ================= */
-exports.updateClaim = async (id, data) => {
+exports.updatePayment = async (id, data) => {
 
   const totalJV = Number(data.total_jv_amount || 0);
   const actualPassed = Number(data.actual_passed_amount || 0);
@@ -239,9 +239,9 @@ exports.updateClaim = async (id, data) => {
     tds -
     deduction20;
 
-  /* remove fields not in claims table or shouldn't be updated */
+  /* remove fields not in payments table or shouldn't be updated */
   const {
-    id: claimId,
+    id: paymentId,
     created_at,
     updated_at,
     approved_at,
@@ -259,7 +259,7 @@ exports.updateClaim = async (id, data) => {
   };
 
   const [result] = await db.query(
-    `UPDATE claims SET ? WHERE id = ? AND status = 'Pending'`,
+    `UPDATE payments SET ? WHERE id = ? AND status = 'Pending'`,
     [payload, id]
   );
 
@@ -268,7 +268,7 @@ exports.updateClaim = async (id, data) => {
   }
 
   const [updated] = await db.query(
-    `SELECT * FROM claims WHERE id = ?`,
+    `SELECT * FROM payments WHERE id = ?`,
     [id]
   );
 
@@ -276,9 +276,9 @@ exports.updateClaim = async (id, data) => {
 };
 
 /* ================= DELETE ================= */
-exports.deleteClaim = async (id) => {
+exports.deletePayment = async (id) => {
   const [check] = await db.query(
-    `SELECT status FROM claims WHERE id = ?`,
+    `SELECT status FROM payments WHERE id = ?`,
     [id]
   );
 
@@ -291,12 +291,12 @@ exports.deleteClaim = async (id) => {
     check[0].status === "Rejected"
   ) {
     throw new Error(
-      "Approved and rejected claims can't be deleted"
+      "Approved and rejected payments can't be deleted"
     );
   }
 
   const [result] = await db.query(
-    `DELETE FROM claims WHERE id = ?`,
+    `DELETE FROM payments WHERE id = ?`,
     [id]
   );
 
@@ -304,9 +304,9 @@ exports.deleteClaim = async (id) => {
 };
 
 /* ================= APPROVE ================= */
-exports.approveClaim = async (id, userId) => {
+exports.approvePayment = async (id, userId) => {
   const [result] = await db.query(
-    `UPDATE claims 
+    `UPDATE payments 
      SET status='Approved', approved_by=?, approved_at=NOW()
      WHERE id=? AND status='Pending'`,
     [userId, id]
@@ -315,9 +315,9 @@ exports.approveClaim = async (id, userId) => {
 };
 
 /* ================= REJECT ================= */
-exports.rejectClaim = async (id, userId) => {
+exports.rejectPayment = async (id, userId) => {
   const [result] = await db.query(
-    `UPDATE claims 
+    `UPDATE payments 
      SET status='Rejected', rejected_by=?, rejected_at=NOW()
      WHERE id=? AND status='Pending'`,
     [userId, id]

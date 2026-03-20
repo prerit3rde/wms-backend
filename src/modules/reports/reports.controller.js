@@ -1,8 +1,8 @@
 const reportsService = require("./reports.service");
 
-exports.getClaimsReport = async (req, res) => {
+exports.getPaymentsReport = async (req, res) => {
   try {
-    const data = await reportsService.getClaimsReport(req.query);
+    const data = await reportsService.getPaymentsReport(req.query);
 
     res.json({
       success: true,
@@ -16,11 +16,11 @@ exports.getClaimsReport = async (req, res) => {
   }
 };
 
-exports.generateClaimsReport = async (req, res) => {
+exports.generatePaymentsReport = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    const result = await reportsService.generateClaimsReport(
+    const result = await reportsService.generatePaymentsReport(
       req.body.filters,
       userId
     );
