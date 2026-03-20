@@ -3,11 +3,12 @@ const db = require("../../config/db");
 /* ================= CREATE ================= */
 exports.createPayment = async (data) => {
 
-  const totalJV = Number(data.total_jv_amount || 0);
-  const actualPassed = Number(data.actual_passed_amount || 0);
+  const billAmount = Number(data.bill_amount || 0);
 
-  const tds = totalJV * 0.10;
-  const deduction20 = totalJV * 0.20;
+  const actualPassed = billAmount;
+
+  const tds = billAmount * 0.10;
+  const deduction20 = billAmount * 0.20;
 
   const payToJVS =
     actualPassed -
@@ -16,6 +17,8 @@ exports.createPayment = async (data) => {
 
   const payload = {
     ...data,
+    bill_amount: billAmount,
+    actual_passed_amount: actualPassed,
     status: "Pending",
 
     tds,
@@ -29,7 +32,6 @@ exports.createPayment = async (data) => {
   );
 
   return result.insertId;
-
 };
 
 /* ================= FILTER OPTIONS ================= */
@@ -228,18 +230,18 @@ exports.getPaymentById = async (id) => {
 /* ================= UPDATE ================= */
 exports.updatePayment = async (id, data) => {
 
-  const totalJV = Number(data.total_jv_amount || 0);
-  const actualPassed = Number(data.actual_passed_amount || 0);
+  const billAmount = Number(data.bill_amount || 0);
 
-  const tds = totalJV * 0.10;
-  const deduction20 = totalJV * 0.20;
+  const actualPassed = billAmount;
+
+  const tds = billAmount * 0.10;
+  const deduction20 = billAmount * 0.20;
 
   const payToJVS =
     actualPassed -
     tds -
     deduction20;
 
-  /* remove fields not in payments table or shouldn't be updated */
   const {
     id: paymentId,
     created_at,
@@ -253,6 +255,8 @@ exports.updatePayment = async (id, data) => {
 
   const payload = {
     ...cleanData,
+    bill_amount: billAmount,
+    actual_passed_amount: actualPassed,
     tds,
     deduction_20_percent: deduction20,
     pay_to_jvs_amount: payToJVS
