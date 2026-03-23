@@ -1,3 +1,5 @@
+const pool = require("../../config/db");
+
 const warehouseService = require("./warehouse.service");
 
 exports.getWarehouseFilters = async (req, res) => {
@@ -98,5 +100,89 @@ exports.updateWarehouse = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+exports.bulkInsertWarehouses = async (req, res) => {
+  try {
+    const { data } = req.body;
+
+    if (!data || !data.length) {
+      return res.status(400).json({ message: "No data provided" });
+    }
+
+    for (const row of data) {
+      // ✅ Convert warehouse_type → id
+      const [type] = await pool.query(
+        "SELECT id FROM warehouse_types WHERE LOWER(name) = LOWER(?)",
+        [row.warehouse_type]
+      );
+
+      if (!type.length) {
+        throw new Error(`Invalid warehouse type: ${row.warehouse_type}`);
+      }
+
+      const typeId = type[0].id;
+
+      await pool.query(
+        `INSERT INTO warehouses (
+          district_name,
+          branch_name,
+          warehouse_name,
+          warehouse_owner_name,
+          warehouse_type_id,
+          warehouse_no,
+          gst_no,
+          scheme,
+          scheme_rate_amount,
+          actual_storage_capacity,
+          approved_storage_capacity,
+          bank_solvency_affidavit_amount,
+          bank_solvency_certificate_amount,
+          bank_solvency_deduction_by_bill,
+          bank_solvency_balance_amount,
+          total_emi,
+          emi_deduction_by_bill,
+          balance_amount_emi,
+          pan_card_holder,
+          pan_card_number,
+          is_imported
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+        [
+          row.district_name,
+          row.branch_name,
+          row.warehouse_name,
+          row.warehouse_owner_name,
+          typeId,
+          row.warehouse_no,
+          row.gst_no,
+          row.scheme,
+          row.scheme_rate_amount,
+          row.actual_storage_capacity,
+          row.approved_storage_capacity,
+          row.bank_solvency_affidavit_amount || 0,
+          row.bank_solvency_certificate_amount || 0,
+          row.bank_solvency_deduction_by_bill || 0,
+          row.bank_solvency_balance_amount || 0,
+          row.total_emi || 0,
+          row.emi_deduction_by_bill || 0,
+          row.balance_amount_emi || 0,
+          row.pan_card_holder,
+          row.pan_card_number,
+        ]
+      );
+    }
+
+    res.json({
+      success: true,
+      message: "Warehouses imported successfully",
+    });
+
+  } catch (error) {
+    console.error("IMPORT ERROR 👉", error); // 🔥 IMPORTANT
+
+    res.status(500).json({
+      message: error.message, // 🔥 SHOW REAL ERROR
+    });
   }
 };

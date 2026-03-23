@@ -196,6 +196,10 @@ exports.getWarehouses = async (queryParams) => {
       values.push(warehouse_type);
     }
 
+    if (sort === "imported") {
+      query += " AND is_imported = 1";
+    }
+
     /* SORT */
     let orderBy = "w.id DESC";
 

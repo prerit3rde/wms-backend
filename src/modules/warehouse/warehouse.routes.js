@@ -15,4 +15,6 @@ router.get("/:id", warehouseController.getWarehouseById);
 router.delete("/:id", warehouseController.deleteWarehouse);
 router.put("/:id", warehouseController.updateWarehouse);
 
+router.post("/bulk-insert", warehouseController.bulkInsertWarehouses);
+
 module.exports = router;

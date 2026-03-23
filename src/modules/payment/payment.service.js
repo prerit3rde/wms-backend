@@ -2,28 +2,32 @@ const db = require("../../config/db");
 
 /* ================= CREATE ================= */
 exports.createPayment = async (data) => {
-
   const billAmount = Number(data.bill_amount || 0);
 
   const actualPassed = billAmount;
 
-  const tds = billAmount * 0.10;
-  const deduction20 = billAmount * 0.20;
+  const tds =
+    data.tds !== undefined && data.tds !== ""
+      ? Number(data.tds)
+      : billAmount * 0.1;
 
-  const payToJVS =
-    actualPassed -
-    tds -
-    deduction20;
+  const deduction_20_percent =
+    data.deduction_20_percent !== undefined &&
+      data.deduction_20_percent !== ""
+      ? Number(data.deduction_20_percent)
+      : billAmount * 0.2;
+
+  const pay_to_jvs_amount =
+    billAmount - tds - deduction_20_percent;
 
   const payload = {
     ...data,
     bill_amount: billAmount,
     actual_passed_amount: actualPassed,
     status: "Pending",
-
     tds,
-    deduction_20_percent: deduction20,
-    pay_to_jvs_amount: payToJVS
+    deduction_20_percent,
+    pay_to_jvs_amount,
   };
 
   const [result] = await db.query(
@@ -91,10 +95,12 @@ exports.getAllPayments = async (queryParams) => {
         district_name LIKE ?
         OR branch_name LIKE ?
         OR warehouse_name LIKE ?
+        OR commodity LIKE ?
+        OR depositers_name LIKE ?
       )
     `;
     const s = `%${search}%`;
-    values.push(s, s, s, s);
+    values.push(s, s, s, s, s);
   }
 
   /* FILTERS */
@@ -163,10 +169,12 @@ exports.getAllPayments = async (queryParams) => {
         district_name LIKE ?
         OR branch_name LIKE ?
         OR warehouse_name LIKE ?
+        OR commodity LIKE ?
+      OR depositers_name LIKE ?
       )
     `;
     const s = `%${search}%`;
-    countValues.push(s, s, s, s);
+    countValues.push(s, s, s, s, s);
   }
 
   if (district) {
@@ -229,18 +237,23 @@ exports.getPaymentById = async (id) => {
 
 /* ================= UPDATE ================= */
 exports.updatePayment = async (id, data) => {
-
   const billAmount = Number(data.bill_amount || 0);
 
   const actualPassed = billAmount;
 
-  const tds = billAmount * 0.10;
-  const deduction20 = billAmount * 0.20;
+  const tds =
+    data.tds !== undefined && data.tds !== ""
+      ? Number(data.tds)
+      : billAmount * 0.1;
 
-  const payToJVS =
-    actualPassed -
-    tds -
-    deduction20;
+  const deduction_20_percent =
+    data.deduction_20_percent !== undefined &&
+    data.deduction_20_percent !== ""
+      ? Number(data.deduction_20_percent)
+      : billAmount * 0.2;
+
+  const pay_to_jvs_amount =
+    billAmount - tds - deduction_20_percent;
 
   const {
     id: paymentId,
@@ -258,8 +271,8 @@ exports.updatePayment = async (id, data) => {
     bill_amount: billAmount,
     actual_passed_amount: actualPassed,
     tds,
-    deduction_20_percent: deduction20,
-    pay_to_jvs_amount: payToJVS
+    deduction_20_percent,
+    pay_to_jvs_amount,
   };
 
   const [result] = await db.query(
@@ -267,9 +280,7 @@ exports.updatePayment = async (id, data) => {
     [payload, id]
   );
 
-  if (result.affectedRows === 0) {
-    return null;
-  }
+  if (result.affectedRows === 0) return null;
 
   const [updated] = await db.query(
     `SELECT * FROM payments WHERE id = ?`,
