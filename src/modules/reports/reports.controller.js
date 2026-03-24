@@ -1,68 +1,67 @@
-const reportsService = require("./reports.service");
+const reportService = require("./reports.service");
+const exportService = require("./reports.export.service");
 
-exports.getPaymentsReport = async (req, res) => {
+exports.getFinancialYears = async (req, res) => {
   try {
-    const data = await reportsService.getPaymentsReport(req.query);
+    const data = await reportService.getFinancialYears();
 
-    res.json({
-      success: true,
-      data,
-    });
+    res.json({ success: true, data });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-exports.generatePaymentsReport = async (req, res) => {
+exports.previewReport = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const { reportType, financialYear } = req.query;
 
-    const result = await reportsService.generatePaymentsReport(
-      req.body.filters,
-      userId
+    const data = await reportService.getFilteredPayments({
+      reportType,
+      financialYear,
+    });
+
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+exports.generateReport = async (req, res) => {
+  try {
+    const { reportType, financialYear } = req.body;
+
+    const data = await reportService.getFilteredPayments({
+      reportType,
+      financialYear,
+    });
+
+    const filePath = await exportService.generateExcel(
+      data,
+      reportType,
+      financialYear
     );
 
-    res.json({
-      success: true,
-      message: "Report generated",
-      data: result,
+    await reportService.saveReport({
+      reportType,
+      financialYear,
+      filePath,
     });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
-
-exports.getReportHistory = async (req, res) => {
-  try {
-    const data = await reportsService.getReportHistory();
 
     res.json({
       success: true,
-      data,
+      message: "Report generated successfully",
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-exports.downloadReport = async (req, res) => {
+exports.getReports = async (req, res) => {
   try {
-    const file = await reportsService.getReportFile(req.params.id);
+    const data = await reportService.getAllReports();
 
-    res.download(file.file_path);
+    res.json({ success: true, data });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 };

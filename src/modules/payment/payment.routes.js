@@ -12,4 +12,6 @@ router.delete("/:id", controller.deletePayment);
 router.patch("/:id/approve", verifyToken , controller.approvePayment);
 router.patch("/:id/reject", verifyToken , controller.rejectPayment);
 
+router.post("/bulk-insert", controller.bulkInsertPayments);
+
 module.exports = router;

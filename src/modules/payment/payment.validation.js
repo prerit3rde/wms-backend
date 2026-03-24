@@ -11,12 +11,27 @@ exports.createPaymentSchema = Joi.object({
     warehouse_owner_name: Joi.string().allow("").optional(),
     warehouse_type: Joi.string().allow("").optional(),
     warehouse_no: Joi.string().allow("").optional(),
-    sr_no: Joi.string().allow("").optional(),
+    gst_no: Joi.string().allow('', null).optional(),
+
+    /* ================= Warehouse EXTRA ================= */
+
+    scheme: Joi.string().allow('', null).optional(),
+    scheme_rate_amount: Joi.number().optional(),
+
+    actual_storage_capacity: Joi.number().optional(),
+    approved_storage_capacity: Joi.number().optional(),
+
+    bank_solvency_affidavit_amount: Joi.number().optional(),
+    bank_solvency_certificate_amount: Joi.number().optional(),
+    bank_solvency_deduction_by_bill: Joi.number().optional(),
+    bank_solvency_balance: Joi.number().optional(),
+
+    total_emi: Joi.number().optional(),
+    emi_deduction_by_bill: Joi.number().optional(),
+    emi_balance: Joi.number().optional(),
 
     pan_card_holder: Joi.string().allow("").optional(),
     pan_card_number: Joi.string().allow("").optional(),
-
-    deposit_name: Joi.string().allow("").optional(),
 
     /* ================= Billing ================= */
 
@@ -59,7 +74,7 @@ exports.createPaymentSchema = Joi.object({
 
     emi_fdr_interest: Joi.number().optional(),
 
-    gain_shortage_deducton: Joi.number().optional(),
+    gain_shortage_deduction: Joi.number().optional(),
     stock_shortage_deduction: Joi.number().optional(),
 
     bank_solvancy: Joi.number().optional(),

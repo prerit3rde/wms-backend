@@ -95,12 +95,13 @@ exports.getAllPayments = async (queryParams) => {
         district_name LIKE ?
         OR branch_name LIKE ?
         OR warehouse_name LIKE ?
+        OR warehouse_type LIKE ?
         OR commodity LIKE ?
         OR depositers_name LIKE ?
       )
     `;
     const s = `%${search}%`;
-    values.push(s, s, s, s, s);
+    values.push(s, s, s, s, s, s);
   }
 
   /* FILTERS */
@@ -128,6 +129,10 @@ exports.getAllPayments = async (queryParams) => {
   if (from_date && to_date) {
     query += ` AND DATE(created_at) BETWEEN ? AND ?`;
     values.push(from_date, to_date);
+  }
+
+  if (sort === "imported") {
+    query += " AND is_imported = 1";
   }
 
   /* SORTING */
@@ -248,7 +253,7 @@ exports.updatePayment = async (id, data) => {
 
   const deduction_20_percent =
     data.deduction_20_percent !== undefined &&
-    data.deduction_20_percent !== ""
+      data.deduction_20_percent !== ""
       ? Number(data.deduction_20_percent)
       : billAmount * 0.2;
 
