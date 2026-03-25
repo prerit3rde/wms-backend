@@ -65,3 +65,26 @@ exports.getReports = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+exports.downloadReport = async (req, res) => {
+  try {
+    const { file } = req.query;
+
+    const filePath = require("path").join(
+      __dirname,
+      "../../",
+      file
+    );
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.download(filePath);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Download failed",
+    });
+  }
+};

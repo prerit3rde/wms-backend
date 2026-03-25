@@ -31,4 +31,6 @@ app.use("/api/reports", reportsRoutes);
 
 app.use(errorMiddleware);
 
+app.use("/uploads", express.static("uploads"));
+
 module.exports = app;

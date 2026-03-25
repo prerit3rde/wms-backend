@@ -41,8 +41,36 @@ exports.generateExcel = async (data, reportType, financialYear) => {
 
   data.forEach((item) => {
     worksheet.addRow({
-      ...item,
-      period: `${item.from_date} to ${item.to_date}`,
+      id: item.id || "",
+      bill_type: item.bill_type || "",
+      district_name: item.district_name || "",
+      branch_name: item.branch_name || "",
+      warehouse_name: item.warehouse_name || "",
+      warehouse_no: item.warehouse_no || "",
+      pan_holder: item.pan_card_holder || "",
+      pan_number: item.pan_card_number || "",
+      depositer_name: item.depositers_name || "",
+      commodity: item.commodity || "",
+      period: `${item.from_date || ""} to ${item.to_date || ""}`,
+      bill_amount: Number(item.bill_amount || 0),
+      total_jv: Number(item.total_jv || 0),
+      actual_passed: Number(item.actual_passed || 0),
+      tds: Number(item.tds || 0),
+      emi_amount: Number(item.emi_amount || 0),
+      deduction_20: Number(item.deduction_20_percent || 0),
+      penalty: Number(item.penalty || 0),
+      medicine: Number(item.medicine || 0),
+      emi_fdr_interest: Number(item.emi_fdr_interest || 0),
+      gain_shortage: Number(item.gain_shortage || 0),
+      stock_shortage: Number(item.stock_shortage || 0),
+      bank_solvancy: Number(item.bank_solvancy || 0),
+      insurance: Number(item.insurance || 0),
+      other_deduction: Number(item.other_deduction || 0),
+      pay_to_jvs: Number(item.pay_to_jvs || 0),
+      payment_by: item.payment_by || "",
+      payment_date: item.payment_date || "",
+      qtr: item.qtr || "",
+      remarks: item.remarks || "",
     });
   });
 
@@ -54,5 +82,5 @@ exports.generateExcel = async (data, reportType, financialYear) => {
 
   await workbook.xlsx.writeFile(filePath);
 
-  return filePath;
+  return `uploads/reports/${fileName}`;
 };
