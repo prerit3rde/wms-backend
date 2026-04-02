@@ -5,9 +5,9 @@ const pool = require("../../config/db");
 ====================================================== */
 exports.createWarehouse = async (data, userId) => {
   const {
-    approved_storage_capacity,
-    actual_storage_capacity,
-    scheme_rate_amount,
+    approved_storage_capacity = 0,
+    actual_storage_capacity = 0,
+    scheme_rate_amount = 0,
     bank_solvency_deduction_by_bill = 0,
     emi_deduction_by_bill = 0,
     is_affidavit,
@@ -59,10 +59,9 @@ exports.createWarehouse = async (data, userId) => {
       balance_amount_emi,
 
       pan_card_holder,
-      pan_card_number,
-      created_at
+      pan_card_number
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
   const values = [
@@ -75,9 +74,9 @@ exports.createWarehouse = async (data, userId) => {
     data.gst_no || null,
 
     data.scheme,
-    data.scheme_rate_amount,
-    data.actual_storage_capacity,
-    data.approved_storage_capacity,
+    scheme_rate_amount,
+    actual_storage_capacity,
+    approved_storage_capacity,
 
     affidavit_amount,
     certificate_amount,
@@ -90,7 +89,6 @@ exports.createWarehouse = async (data, userId) => {
 
     data.pan_card_holder,
     data.pan_card_number,
-    userId,
   ];
 
   const [result] = await pool.query(query, values);

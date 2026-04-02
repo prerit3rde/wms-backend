@@ -19,3 +19,27 @@ exports.sendResetEmail = async (email, token) => {
            <a href="${resetLink}">${resetLink}</a>`,
   });
 };
+
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
+
+// ✅ NEW FUNCTION
+exports.sendEmailChangeVerification = async (email, token) => {
+  const url = `http://localhost:5000/api/auth/confirm-email/${token}`;
+
+  await transporter.sendMail({
+    to: email,
+    subject: "Confirm Email Change",
+    html: `
+      <h3>Email Change Request</h3>
+      <p>You requested to change your email.</p>
+      <p>Click below to confirm:</p>
+      <a href="${url}">Confirm Email Change</a>
+    `,
+  });
+};
