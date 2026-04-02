@@ -4,95 +4,111 @@ const pool = require("../../config/db");
    CREATE
 ====================================================== */
 exports.createWarehouse = async (data, userId) => {
-  const {
-    approved_storage_capacity = 0,
-    actual_storage_capacity = 0,
-    scheme_rate_amount = 0,
-    bank_solvency_deduction_by_bill = 0,
-    emi_deduction_by_bill = 0,
-    is_affidavit,
-    bank_solvency_certificate_amount = 0,
-  } = data;
+  const conn = await pool.getConnection();
 
-  // ✅ CALCULATIONS
-  const affidavit_amount = approved_storage_capacity * 50;
+  try {
+    await conn.beginTransaction();
 
-  const certificate_amount = is_affidavit
-    ? 0
-    : bank_solvency_certificate_amount;
+    const { cropData = [], ...basic } = data;
 
-  const base_solvency = is_affidavit
-    ? affidavit_amount
-    : certificate_amount;
+    /* ================= INSERT WAREHOUSE ================= */
+    const [warehouseResult] = await conn.query(
+      `INSERT INTO warehouses (
+        district_name,
+        branch_name,
+        warehouse_name,
+        warehouse_owner_name,
+        warehouse_type_id,
+        warehouse_no,
+        gst_no,
+        pan_card_holder,
+        pan_card_number
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        basic.district_name,
+        basic.branch_name,
+        basic.warehouse_name,
+        basic.warehouse_owner_name,
+        basic.warehouse_type_id,
+        basic.warehouse_no,
+        basic.gst_no || null,
+        basic.pan_card_holder,
+        basic.pan_card_number,
+      ]
+    );
 
-  const solvency_balance =
-    base_solvency - bank_solvency_deduction_by_bill;
+    const warehouseId = warehouseResult.insertId;
 
-  const total_emi =
-    (actual_storage_capacity * scheme_rate_amount) / 2;
+    /* ================= INSERT CROP DATA ================= */
+    for (const item of cropData) {
+      const approved = Number(item.approved_storage_capacity || 0);
+      const actual = Number(item.actual_storage_capacity || 0);
+      const rate = Number(item.scheme_rate_amount || 0);
 
-  const balance_emi =
-    total_emi - emi_deduction_by_bill;
+      const affidavit_amount = approved * 50;
 
-  const query = `
-    INSERT INTO warehouses (
-      district_name,
-      branch_name,
-      warehouse_name,
-      warehouse_owner_name,
-      warehouse_type_id,
-      warehouse_no,
-      gst_no,
+      const certificate_amount = item.is_affidavit
+        ? 0
+        : Number(item.bank_solvency_certificate_amount || 0);
 
-      scheme,
-      scheme_rate_amount,
-      actual_storage_capacity,
-      approved_storage_capacity,
+      const base_solvency = item.is_affidavit
+        ? affidavit_amount
+        : certificate_amount;
 
-      bank_solvency_affidavit_amount,
-      bank_solvency_certificate_amount,
-      bank_solvency_deduction_by_bill,
-      bank_solvency_balance_amount,
+      const solvency_balance =
+        base_solvency - Number(item.bank_solvency_deduction_by_bill || 0);
 
-      total_emi,
-      emi_deduction_by_bill,
-      balance_amount_emi,
+      const total_emi = (actual * rate) / 2;
 
-      pan_card_holder,
-      pan_card_number
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `;
+      const balance_emi =
+        total_emi - Number(item.emi_deduction_by_bill || 0);
 
-  const values = [
-    data.district_name,
-    data.branch_name,
-    data.warehouse_name,
-    data.warehouse_owner_name,
-    data.warehouse_type_id,
-    data.warehouse_no,
-    data.gst_no || null,
+      await conn.query(
+        `INSERT INTO warehouse_crop_data (
+          warehouse_id,
+          crop_year,
+          scheme,
+          scheme_rate_amount,
+          actual_storage_capacity,
+          approved_storage_capacity,
+          is_affidavit,
+          bank_solvency_affidavit_amount,
+          bank_solvency_certificate_amount,
+          bank_solvency_deduction_by_bill,
+          bank_solvency_balance_amount,
+          total_emi,
+          emi_deduction_by_bill,
+          balance_amount_emi
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          warehouseId,
+          item.crop_year,
+          item.scheme,
+          rate,
+          actual,
+          approved,
+          item.is_affidavit,
+          affidavit_amount,
+          certificate_amount,
+          item.bank_solvency_deduction_by_bill || 0,
+          solvency_balance,
+          total_emi,
+          item.emi_deduction_by_bill || 0,
+          balance_emi,
+        ]
+      );
+    }
 
-    data.scheme,
-    scheme_rate_amount,
-    actual_storage_capacity,
-    approved_storage_capacity,
+    await conn.commit();
 
-    affidavit_amount,
-    certificate_amount,
-    bank_solvency_deduction_by_bill,
-    solvency_balance,
+    return { insertId: warehouseId };
 
-    total_emi,
-    emi_deduction_by_bill,
-    balance_emi,
-
-    data.pan_card_holder,
-    data.pan_card_number,
-  ];
-
-  const [result] = await pool.query(query, values);
-  return result;
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 };
 
 /* ======================================================
@@ -283,73 +299,135 @@ exports.getWarehouses = async (queryParams) => {
    GET BY ID
 ====================================================== */
 exports.getWarehouseById = async (id) => {
-  const [rows] = await pool.query(
-    `
-    SELECT w.*, wt.name AS warehouse_type
-    FROM warehouses w
-    LEFT JOIN warehouse_types wt 
-      ON w.warehouse_type_id = wt.id
-    WHERE w.id = ?
-    `,
+  const [warehouse] = await pool.query(
+    `SELECT * FROM warehouses WHERE id = ?`,
     [id]
   );
 
-  return rows[0];
+  if (!warehouse.length) return null;
+
+  const [cropData] = await pool.query(
+    `SELECT * FROM warehouse_crop_data WHERE warehouse_id = ?`,
+    [id]
+  );
+
+  return {
+    ...warehouse[0],
+    cropData,
+  };
 };
 
 /* ======================================================
    UPDATE
 ====================================================== */
 exports.updateWarehouse = async (id, data) => {
-  const query = `
-    UPDATE warehouses SET
-      district_name = ?,
-      branch_name = ?,
-      warehouse_name = ?,
-      warehouse_owner_name = ?,
-      warehouse_type_id = ?,
-      warehouse_no = ?,
-      gst_no = ?,
+  const conn = await pool.getConnection();
 
-      scheme = ?,
-      scheme_rate_amount = ?,
-      actual_storage_capacity = ?,
-      approved_storage_capacity = ?,
+  try {
+    await conn.beginTransaction();
 
-      bank_solvency_certificate_amount = ?,
-      bank_solvency_deduction_by_bill = ?,
-      emi_deduction_by_bill = ?,
+    const { cropData = [], ...basic } = data;
 
-      pan_card_holder = ?,
-      pan_card_number = ?
-    WHERE id = ? AND is_deleted = FALSE
-  `;
+    /* UPDATE BASE */
+    await conn.query(
+      `UPDATE warehouses SET
+        district_name = ?,
+        branch_name = ?,
+        warehouse_name = ?,
+        warehouse_owner_name = ?,
+        warehouse_type_id = ?,
+        warehouse_no = ?,
+        gst_no = ?,
+        pan_card_holder = ?,
+        pan_card_number = ?
+      WHERE id = ?`,
+      [
+        basic.district_name,
+        basic.branch_name,
+        basic.warehouse_name,
+        basic.warehouse_owner_name,
+        basic.warehouse_type_id,
+        basic.warehouse_no,
+        basic.gst_no || null,
+        basic.pan_card_holder,
+        basic.pan_card_number,
+        id,
+      ]
+    );
 
-  const values = [
-    data.district_name,
-    data.branch_name,
-    data.warehouse_name,
-    data.warehouse_owner_name,
-    data.warehouse_type_id,
-    data.warehouse_no,
-    data.gst_no || null,
+    /* DELETE OLD CROP DATA */
+    await conn.query(
+      `DELETE FROM warehouse_crop_data WHERE warehouse_id = ?`,
+      [id]
+    );
 
-    data.scheme,
-    data.scheme_rate_amount,
-    data.actual_storage_capacity,
-    data.approved_storage_capacity,
+    /* INSERT NEW */
+    for (const item of cropData) {
+      const approved = Number(item.approved_storage_capacity || 0);
+      const actual = Number(item.actual_storage_capacity || 0);
+      const rate = Number(item.scheme_rate_amount || 0);
 
-    data.bank_solvency_certificate_amount || 0,
-    data.bank_solvency_deduction_by_bill || 0,
-    data.emi_deduction_by_bill || 0,
+      const affidavit_amount = approved * 50;
+      const certificate_amount = item.is_affidavit
+        ? 0
+        : Number(item.bank_solvency_certificate_amount || 0);
 
-    data.pan_card_holder,
-    data.pan_card_number,
-    id,
-  ];
+      const base_solvency = item.is_affidavit
+        ? affidavit_amount
+        : certificate_amount;
 
-  const [result] = await pool.query(query, values);
-  return result;
+      const solvency_balance =
+        base_solvency - Number(item.bank_solvency_deduction_by_bill || 0);
+
+      const total_emi = (actual * rate) / 2;
+      const balance_emi =
+        total_emi - Number(item.emi_deduction_by_bill || 0);
+
+      await conn.query(
+        `INSERT INTO warehouse_crop_data (
+          warehouse_id,
+          crop_year,
+          scheme,
+          scheme_rate_amount,
+          actual_storage_capacity,
+          approved_storage_capacity,
+          is_affidavit,
+          bank_solvency_affidavit_amount,
+          bank_solvency_certificate_amount,
+          bank_solvency_deduction_by_bill,
+          bank_solvency_balance_amount,
+          total_emi,
+          emi_deduction_by_bill,
+          balance_amount_emi
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          id,
+          item.crop_year,
+          item.scheme,
+          rate,
+          actual,
+          approved,
+          item.is_affidavit,
+          affidavit_amount,
+          certificate_amount,
+          item.bank_solvency_deduction_by_bill || 0,
+          solvency_balance,
+          total_emi,
+          item.emi_deduction_by_bill || 0,
+          balance_emi,
+        ]
+      );
+    }
+
+    await conn.commit();
+    return { success: true };
+
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 };
 
 /* ======================================================
