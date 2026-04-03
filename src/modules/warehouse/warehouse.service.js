@@ -140,11 +140,18 @@ exports.getWarehouseFilters = async () => {
     SELECT id, name FROM warehouse_types
   `);
 
+  const [cropYears] = await pool.query(`
+    SELECT DISTINCT crop_year 
+    FROM warehouse_crop_data
+    ORDER BY crop_year DESC
+  `);
+
   return {
     districts,
     branches,
     warehouseNames: warehouses,
     warehouseTypes: types,
+    cropYears,
   };
 };
 
@@ -165,11 +172,44 @@ exports.getWarehouses = async (queryParams) => {
     const warehouse_name = queryParams.warehouse_name || "";
     const warehouse_type = queryParams.warehouse_type || "";
 
+    const crop_year = queryParams.crop_year || "";
+
     let query = `
-      SELECT w.*, wt.name AS warehouse_type
+      SELECT 
+        w.id,
+        w.district_name,
+        w.branch_name,
+        w.warehouse_name,
+        w.warehouse_owner_name,
+        w.warehouse_type_id,
+        w.warehouse_no,
+        w.gst_no,
+        w.pan_card_holder,
+        w.pan_card_number,
+
+        wt.name AS warehouse_type,
+
+        wc.crop_year,
+        wc.scheme,
+        wc.scheme_rate_amount,
+        wc.actual_storage_capacity,
+        wc.approved_storage_capacity,
+        wc.is_affidavit,
+
+        wc.bank_solvency_affidavit_amount,
+        wc.bank_solvency_certificate_amount,
+        wc.bank_solvency_deduction_by_bill,
+        wc.bank_solvency_balance_amount,
+
+        wc.total_emi,
+        wc.emi_deduction_by_bill,
+        wc.balance_amount_emi
+
       FROM warehouses w
       LEFT JOIN warehouse_types wt 
         ON w.warehouse_type_id = wt.id
+      LEFT JOIN warehouse_crop_data wc 
+        ON w.id = wc.warehouse_id
       WHERE w.is_deleted = FALSE
     `;
 
@@ -210,6 +250,11 @@ exports.getWarehouses = async (queryParams) => {
       values.push(warehouse_type);
     }
 
+    if (crop_year) {
+      query += ` AND wc.crop_year = ?`;
+      values.push(crop_year);
+    }
+
     if (sort === "imported") {
       query += " AND is_imported = 1";
     }
@@ -242,8 +287,10 @@ exports.getWarehouses = async (queryParams) => {
 
     /* COUNT QUERY (FIXED) */
     let countQuery = `
-      SELECT COUNT(*) as total
+      SELECT COUNT(DISTINCT w.id) as total
       FROM warehouses w
+      LEFT JOIN warehouse_crop_data wc 
+      ON w.id = wc.warehouse_id
       WHERE w.is_deleted = FALSE
     `;
 
@@ -282,10 +329,54 @@ exports.getWarehouses = async (queryParams) => {
       countValues.push(warehouse_type);
     }
 
+    if (crop_year) {
+      countQuery += ` AND wc.crop_year = ?`;
+      countValues.push(crop_year);
+    }
+
     const [countResult] = await pool.query(countQuery, countValues);
 
+    const map = {};
+
+    rows.forEach((row) => {
+      if (!map[row.id]) {
+        map[row.id] = {
+          district_name: row.district_name,
+          branch_name: row.branch_name,
+          warehouse_name: row.warehouse_name,
+          warehouse_owner_name: row.warehouse_owner_name,
+          warehouse_type_id: row.warehouse_type_id,
+          warehouse_no: row.warehouse_no,
+          gst_no: row.gst_no,
+          pan_card_holder: row.pan_card_holder,
+          pan_card_number: row.pan_card_number,
+          cropData: [],
+        };
+      }
+
+      if (row.crop_year) {
+        map[row.id].cropData.push({
+          crop_year: row.crop_year,
+          scheme: row.scheme,
+          scheme_rate_amount: row.scheme_rate_amount,
+          actual_storage_capacity: row.actual_storage_capacity,
+          approved_storage_capacity: row.approved_storage_capacity,
+          is_affidavit: Boolean(row.is_affidavit),
+
+          bank_solvency_affidavit_amount: row.bank_solvency_affidavit_amount,
+          bank_solvency_certificate_amount: row.bank_solvency_certificate_amount,
+          bank_solvency_deduction_by_bill: row.bank_solvency_deduction_by_bill,
+          bank_solvency_balance_amount: row.bank_solvency_balance_amount,
+
+          total_emi: row.total_emi,
+          emi_deduction_by_bill: row.emi_deduction_by_bill,
+          balance_amount_emi: row.balance_amount_emi,
+        });
+      }
+    });
+
     return {
-      data: rows,
+      data: Object.values(map),
       total: countResult[0].total,
     };
 
@@ -312,8 +403,34 @@ exports.getWarehouseById = async (id) => {
   );
 
   return {
-    ...warehouse[0],
-    cropData,
+    id: warehouse[0].id,
+    district_name: warehouse[0].district_name,
+    branch_name: warehouse[0].branch_name,
+    warehouse_name: warehouse[0].warehouse_name,
+    warehouse_owner_name: warehouse[0].warehouse_owner_name,
+    warehouse_type_id: warehouse[0].warehouse_type_id,
+    warehouse_no: warehouse[0].warehouse_no,
+    gst_no: warehouse[0].gst_no,
+    pan_card_holder: warehouse[0].pan_card_holder,
+    pan_card_number: warehouse[0].pan_card_number,
+
+    cropData: cropData.map((item) => ({
+      crop_year: item.crop_year,
+      scheme: item.scheme,
+      scheme_rate_amount: Number(item.scheme_rate_amount),
+      actual_storage_capacity: Number(item.actual_storage_capacity),
+      approved_storage_capacity: Number(item.approved_storage_capacity),
+      is_affidavit: Boolean(item.is_affidavit),
+
+      bank_solvency_affidavit_amount: Number(item.bank_solvency_affidavit_amount),
+      bank_solvency_certificate_amount: Number(item.bank_solvency_certificate_amount),
+      bank_solvency_deduction_by_bill: Number(item.bank_solvency_deduction_by_bill),
+      bank_solvency_balance_amount: Number(item.bank_solvency_balance_amount),
+
+      total_emi: Number(item.total_emi),
+      emi_deduction_by_bill: Number(item.emi_deduction_by_bill),
+      balance_amount_emi: Number(item.balance_amount_emi),
+    })),
   };
 };
 

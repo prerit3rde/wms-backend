@@ -45,6 +45,7 @@ exports.createPaymentSchema = Joi.object({
     to_date: Joi.string().required(),
 
     commodity: Joi.string().allow("").optional(),
+    crop_year: Joi.string().allow("").optional(),
     rate: Joi.number().optional(),
 
     rent_bill_amount: Joi.number().optional(),
