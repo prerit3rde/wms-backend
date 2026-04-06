@@ -7,7 +7,7 @@ exports.getFinancialYears = async () => {
   return rows;
 };
 
-exports.getFilteredPayments = async ({ reportType, financialYear }) => {
+exports.getFilteredPayments = async ({ reportType, financialYear, month }) => {
   let field = "";
 
   switch (reportType) {
@@ -27,14 +27,22 @@ exports.getFilteredPayments = async ({ reportType, financialYear }) => {
       throw new Error("Invalid report type");
   }
 
-  const query = `
+  let query = `
     SELECT * FROM payments
     WHERE financial_year = ?
     AND ${field} IS NOT NULL
     AND ${field} != 0
   `;
 
-  const [rows] = await pool.query(query, [financialYear]);
+  let values = [financialYear];
+
+  if (month) {
+    query += ` AND month = ?`;
+    values.push(month);
+  }
+
+  const [rows] = await pool.query(query, values); // ✅ FIXED
+
   return rows;
 };
 
@@ -52,4 +60,13 @@ exports.getAllReports = async () => {
     "SELECT * FROM reports ORDER BY created_at DESC"
   );
   return rows;
+};
+
+exports.deleteReport = async (id) => {
+  const [result] = await pool.query(
+    "DELETE FROM reports WHERE id = ?",
+    [id]
+  );
+
+  return result;
 };

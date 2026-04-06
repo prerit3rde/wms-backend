@@ -17,8 +17,21 @@ exports.createPayment = async (data) => {
       ? Number(data.deduction_20_percent)
       : billAmount * 0.2;
 
-  const pay_to_jvs_amount =
-    billAmount - tds - deduction_20_percent;
+  const totalDeductions =
+    Number(data.tds || 0) +
+    Number(data.amount_deducted_against_gain_loss || 0) +
+    Number(data.emi_amount || 0) +
+    Number(data.deduction_20_percent || 0) +
+    Number(data.penalty || 0) +
+    Number(data.medicine || 0) +
+    Number(data.emi_fdr_interest || 0) +
+    Number(data.gain_shortage_deduction || 0) +
+    Number(data.stock_shortage_deduction || 0) +
+    Number(data.bank_solvancy || 0) +
+    Number(data.insurance || 0) +
+    Number(data.other_deduction_amount || 0);
+
+  const pay_to_jvs_amount = billAmount - totalDeductions;
 
   const payload = {
     ...data,
@@ -84,6 +97,7 @@ exports.getAllPayments = async (queryParams) => {
   const warehouse_type = queryParams.warehouse_type || "";
   const from_date = queryParams.from_date || "";
   const to_date = queryParams.to_date || "";
+  const crop_year = queryParams.crop_year || "";
 
   let query = `SELECT * FROM payments WHERE 1=1`;
   let values = [];
@@ -123,6 +137,11 @@ exports.getAllPayments = async (queryParams) => {
   if (warehouse_type) {
     query += ` AND warehouse_type = ?`;
     values.push(warehouse_type);
+  }
+
+  if (crop_year) {
+    query += ` AND crop_year = ?`;
+    values.push(crop_year);
   }
 
   /* DATE FILTER */
@@ -207,6 +226,11 @@ exports.getAllPayments = async (queryParams) => {
     countValues.push(from_date, to_date);
   }
 
+  if (crop_year) {
+    countQuery += ` AND crop_year = ?`;
+    countValues.push(crop_year);
+  }
+
   if (sort.startsWith("status_")) {
     const statusValue = sort.split("_")[1];
     countQuery += ` AND status = ?`;
@@ -257,8 +281,21 @@ exports.updatePayment = async (id, data) => {
       ? Number(data.deduction_20_percent)
       : billAmount * 0.2;
 
-  const pay_to_jvs_amount =
-    billAmount - tds - deduction_20_percent;
+  const totalDeductions =
+    Number(data.tds || 0) +
+    Number(data.amount_deducted_against_gain_loss || 0) +
+    Number(data.emi_amount || 0) +
+    Number(data.deduction_20_percent || 0) +
+    Number(data.penalty || 0) +
+    Number(data.medicine || 0) +
+    Number(data.emi_fdr_interest || 0) +
+    Number(data.gain_shortage_deduction || 0) +
+    Number(data.stock_shortage_deduction || 0) +
+    Number(data.bank_solvancy || 0) +
+    Number(data.insurance || 0) +
+    Number(data.other_deduction_amount || 0);
+
+  const pay_to_jvs_amount = billAmount - totalDeductions;
 
   const {
     id: paymentId,

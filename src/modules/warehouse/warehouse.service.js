@@ -341,11 +341,13 @@ exports.getWarehouses = async (queryParams) => {
     rows.forEach((row) => {
       if (!map[row.id]) {
         map[row.id] = {
+          id: row.id,
           district_name: row.district_name,
           branch_name: row.branch_name,
           warehouse_name: row.warehouse_name,
           warehouse_owner_name: row.warehouse_owner_name,
-          warehouse_type_id: row.warehouse_type_id,
+          // warehouse_type_id: row.warehouse_type_id,
+          warehouse_type: row.warehouse_type,
           warehouse_no: row.warehouse_no,
           gst_no: row.gst_no,
           pan_card_holder: row.pan_card_holder,
@@ -480,58 +482,41 @@ exports.updateWarehouse = async (id, data) => {
 
     /* INSERT NEW */
     for (const item of cropData) {
-      const approved = Number(item.approved_storage_capacity || 0);
-      const actual = Number(item.actual_storage_capacity || 0);
-      const rate = Number(item.scheme_rate_amount || 0);
-
-      const affidavit_amount = approved * 50;
-      const certificate_amount = item.is_affidavit
-        ? 0
-        : Number(item.bank_solvency_certificate_amount || 0);
-
-      const base_solvency = item.is_affidavit
-        ? affidavit_amount
-        : certificate_amount;
-
-      const solvency_balance =
-        base_solvency - Number(item.bank_solvency_deduction_by_bill || 0);
-
-      const total_emi = (actual * rate) / 2;
-      const balance_emi =
-        total_emi - Number(item.emi_deduction_by_bill || 0);
-
       await conn.query(
         `INSERT INTO warehouse_crop_data (
-          warehouse_id,
-          crop_year,
-          scheme,
-          scheme_rate_amount,
-          actual_storage_capacity,
-          approved_storage_capacity,
-          is_affidavit,
-          bank_solvency_affidavit_amount,
-          bank_solvency_certificate_amount,
-          bank_solvency_deduction_by_bill,
-          bank_solvency_balance_amount,
-          total_emi,
-          emi_deduction_by_bill,
-          balance_amount_emi
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      warehouse_id,
+      crop_year,
+      scheme,
+      scheme_rate_amount,
+      actual_storage_capacity,
+      approved_storage_capacity,
+      is_affidavit,
+      bank_solvency_affidavit_amount,
+      bank_solvency_certificate_amount,
+      bank_solvency_deduction_by_bill,
+      bank_solvency_balance_amount,
+      total_emi,
+      emi_deduction_by_bill,
+      balance_amount_emi
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id,
           item.crop_year,
           item.scheme,
-          rate,
-          actual,
-          approved,
-          item.is_affidavit,
-          affidavit_amount,
-          certificate_amount,
-          item.bank_solvency_deduction_by_bill || 0,
-          solvency_balance,
-          total_emi,
-          item.emi_deduction_by_bill || 0,
-          balance_emi,
+          Number(item.scheme_rate_amount || 0),
+          Number(item.actual_storage_capacity || 0),
+          Number(item.approved_storage_capacity || 0),
+          item.is_affidavit ? 1 : 0,
+
+          // ✅ DIRECT VALUES (NO CALCULATION)
+          Number(item.bank_solvency_affidavit_amount || 0),
+          Number(item.bank_solvency_certificate_amount || 0),
+          Number(item.bank_solvency_deduction_by_bill || 0),
+          Number(item.bank_solvency_balance_amount || 0),
+
+          Number(item.total_emi || 0),
+          Number(item.emi_deduction_by_bill || 0),
+          Number(item.balance_amount_emi || 0),
         ]
       );
     }
@@ -551,9 +536,35 @@ exports.updateWarehouse = async (id, data) => {
    DELETE
 ====================================================== */
 exports.deleteWarehouse = async (id) => {
-  const [result] = await pool.query(
-    `UPDATE warehouses SET is_deleted = TRUE WHERE id = ?`,
-    [id]
-  );
-  return result;
+  const conn = await pool.getConnection();
+
+  try {
+    await conn.beginTransaction();
+
+    // ✅ 1. Soft delete warehouse
+    const [warehouseResult] = await conn.query(
+      `UPDATE warehouses SET is_deleted = TRUE WHERE id = ?`,
+      [id]
+    );
+
+    if (warehouseResult.affectedRows === 0) {
+      throw new Error("Warehouse not found");
+    }
+
+    // ✅ 2. Delete related crop data
+    await conn.query(
+      `DELETE FROM warehouse_crop_data WHERE warehouse_id = ?`,
+      [id]
+    );
+
+    await conn.commit();
+
+    return warehouseResult;
+
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 };

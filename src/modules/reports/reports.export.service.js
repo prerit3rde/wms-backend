@@ -39,6 +39,67 @@ exports.generateExcel = async (data, reportType, financialYear) => {
     { header: "Remarks", key: "remarks", width: 30 },
   ];
 
+  // ✅ ADD DEDUCTION HEADER ROW (ONLY FOR TDS)
+  if (reportType === "TDS") {
+    // Add empty row at top
+    worksheet.insertRow(1, []);
+
+    // Find column indexes (1-based)
+    const deductionStartIndex = worksheet.columns.findIndex(
+      (col) => col.key === "tds"
+    ) + 1;
+
+    const deductionEndIndex = worksheet.columns.findIndex(
+      (col) => col.key === "other_deduction"
+    ) + 1;
+
+    // Merge cells from TDS → Other Deduction
+    worksheet.mergeCells(
+      1,
+      deductionStartIndex,
+      1,
+      deductionEndIndex
+    );
+
+    const cell = worksheet.getCell(1, deductionStartIndex);
+
+    cell.value = "Deductions";
+
+    cell.alignment = {
+      horizontal: "center",
+      vertical: "middle",
+    };
+
+    cell.font = { bold: true };
+
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFD9D9D9" },
+    };
+
+    cell.border = {
+      top: { style: "thin" },
+      left: { style: "thin" },
+      bottom: { style: "thin" },
+      right: { style: "thin" },
+    };
+  }
+
+  // ✅ STYLE HEADER ROW (NOW ROW 2)
+  const headerRow = worksheet.getRow(reportType === "TDS" ? 2 : 1);
+
+  headerRow.eachCell((cell) => {
+    cell.font = { bold: true };
+    cell.alignment = { horizontal: "center" };
+    cell.border = {
+      top: { style: "thin" },
+      left: { style: "thin" },
+      bottom: { style: "thin" },
+      right: { style: "thin" },
+    };
+  });
+
   data.forEach((item) => {
     worksheet.addRow({
       id: item.id || "",

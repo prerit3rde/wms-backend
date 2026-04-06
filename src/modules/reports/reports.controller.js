@@ -13,11 +13,12 @@ exports.getFinancialYears = async (req, res) => {
 
 exports.previewReport = async (req, res) => {
   try {
-    const { reportType, financialYear } = req.query;
+    const { reportType, financialYear, month } = req.query;
 
     const data = await reportService.getFilteredPayments({
       reportType,
       financialYear,
+      month,
     });
 
     res.json({ success: true, data });
@@ -28,11 +29,12 @@ exports.previewReport = async (req, res) => {
 
 exports.generateReport = async (req, res) => {
   try {
-    const { reportType, financialYear } = req.body;
+    const { reportType, financialYear, month } = req.body;
 
     const data = await reportService.getFilteredPayments({
       reportType,
       financialYear,
+      month,
     });
 
     const filePath = await exportService.generateExcel(
@@ -85,6 +87,22 @@ exports.downloadReport = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Download failed",
+    });
+  }
+};
+
+exports.deleteReport = async (req, res) => {
+  try {
+    await reportService.deleteReport(req.params.id);
+
+    res.json({
+      success: true,
+      message: "Report deleted successfully",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
     });
   }
 };
