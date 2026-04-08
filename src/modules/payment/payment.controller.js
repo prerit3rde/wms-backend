@@ -234,7 +234,7 @@ const normalizeRow = (row) => {
 
 exports.bulkInsertPayments = async (req, res) => {
   try {
-    const { data } = req.body;
+    const { data, mode = "update" } = req.body;
 
     const [types] = await pool.query("SELECT * FROM warehouse_types");
 
@@ -341,6 +341,14 @@ exports.bulkInsertPayments = async (req, res) => {
       payload.pan_card_holder = w.pan_card_holder;
       payload.pan_card_number = w.pan_card_number;
 
+      // 🔥 MODE: INSERT ONLY (NO CHECK)
+      if (mode === "insert") {
+        await pool.query(`INSERT INTO payments SET ?`, [payload]);
+        inserted++;
+        continue;
+      }
+
+      // 🔥 MODE: UPDATE (EXISTING LOGIC)
       const [existingRows] = await pool.query(
         "SELECT * FROM payments WHERE id = ?",
         [row.id]
@@ -383,7 +391,6 @@ exports.bulkInsertPayments = async (req, res) => {
         }
       } else {
         await pool.query(`INSERT INTO payments SET ?`, [payload]);
-
         inserted++;
       }
     }

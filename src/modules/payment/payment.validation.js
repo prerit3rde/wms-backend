@@ -48,7 +48,7 @@ exports.createPaymentSchema = Joi.object({
     crop_year: Joi.string().allow("").optional(),
     rate: Joi.number().optional(),
 
-    rent_bill_amount: Joi.number().optional(),
+    total_jv_amount: Joi.number().optional(),
 
     bill_amount: Joi.number().required(), // 🔥 MAIN FIELD
     actual_passed_amount: Joi.number().optional(),
