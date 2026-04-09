@@ -8,6 +8,7 @@ const warehouseTypeRoutes = require("./modules/warehouseType/warehouseType.route
 const dashboardRoutes = require("./modules/dashboard/dashboard.routes");
 const paymentRoutes = require("./modules/payment/payment.routes");
 const reportsRoutes = require("./modules/reports/reports.routes");
+const path = require("path");
 
 const app = express();
 
@@ -32,5 +33,10 @@ app.use("/api/reports", reportsRoutes);
 app.use(errorMiddleware);
 
 app.use("/uploads", express.static("uploads"));
+
+app.use(
+  "/samples",
+  express.static(path.join(__dirname, "../public/samples"))
+);
 
 module.exports = app;

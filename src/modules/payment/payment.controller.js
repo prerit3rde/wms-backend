@@ -243,7 +243,6 @@ exports.bulkInsertPayments = async (req, res) => {
       typeMap[t.name] = t.id;
     });
 
-    // ✅ TRACKING
     let inserted = 0;
     let updated = 0;
     let skipped = 0;
@@ -251,8 +250,31 @@ exports.bulkInsertPayments = async (req, res) => {
     let updatedIds = [];
     let skippedIds = [];
 
+    const clean = (val) => val?.toString().trim();
+
+    const normalizeRow = (row) => {
+      const newRow = {};
+      Object.keys(row).forEach((key) => {
+        const cleanKey = key
+          .toString()
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, "_");
+
+        newRow[cleanKey] = row[key];
+      });
+      return newRow;
+    };
+
     for (let row of data) {
       row = normalizeRow(row);
+
+      // ✅ Fix warehouse_owner mapping
+      if (row.warehouse_owner) {
+        row.warehouse_owner_name = row.warehouse_owner;
+        delete row.warehouse_owner;
+      }
+
       const typeId = typeMap[clean(row.warehouse_type)];
 
       if (!typeId) {
@@ -281,33 +303,104 @@ exports.bulkInsertPayments = async (req, res) => {
         throw new Error(`Warehouse not found: ${row.warehouse_name}`);
       }
 
-      if (!warehouse.length) {
-        throw new Error(`Warehouse not found: ${row.warehouse_name}`);
-      }
-
-      const w = warehouse[0]; // ✅ REQUIRED
+      const w = warehouse[0];
 
       const payload = {};
 
-      // ✅ ONLY TAKE VALID EXCEL VALUES
+      const allowedFields = [
+        "district_name",
+        "branch_name",
+        "warehouse_name",
+        "warehouse_owner_name",
+        "warehouse_type",
+        "warehouse_no",
+        "gst_no",
+        "scheme",
+        "scheme_rate_amount",
+        "actual_storage_capacity",
+        "approved_storage_capacity",
+        "bank_solvency_affidavit_amount",
+        "bank_solvency_certificate_amount",
+        "bank_solvency_deduction_by_bill",
+        "bank_solvency_balance",
+        "total_emi",
+        "emi_deduction_by_bill",
+        "emi_balance",
+        "pan_card_holder",
+        "pan_card_number",
+        "rent_bill_number",
+        "bill_type",
+        "month",
+        "financial_year",
+        "from_date",
+        "to_date",
+        "commodity",
+        "crop_year",
+        "rate",
+        "total_jv_amount",
+        "bill_amount",
+        "actual_passed_amount",
+        "depositers_name",
+        "scientific_capacity",
+        "number_of_days",
+        "per_day_rate",
+        "rent_amount_on_scientific_capacity",
+        "tds",
+        "amount_deducted_against_gain_loss",
+        "emi_amount",
+        "deduction_20_percent",
+        "penalty",
+        "medicine",
+        "emi_fdr_interest",
+        "gain_shortage_deduction",
+        "stock_shortage_deduction",
+        "bank_solvancy",
+        "insurance",
+        "other_deduction_amount",
+        "other_deductions_reason",
+        "pay_to_jvs_amount",
+        "security_fund_amount",
+        "payment_by",
+        "payment_date",
+        "qtr",
+        "remarks",
+      ];
+
+      // ✅ Build payload
       Object.keys(row).forEach((key) => {
-        if (row[key] !== undefined && row[key] !== "") {
+        if (key === "sr_no") return;
+
+        if (allowedFields.includes(key) && row[key] !== "" && row[key] !== undefined) {
           payload[key] = row[key];
         }
       });
 
-      // ❌ NEVER overwrite ID
+      // ✅ 🔥 FIX: Convert payment_date AFTER payload build
+      if (payload.payment_date) {
+        const d = new Date(payload.payment_date);
+
+        if (!isNaN(d)) {
+          const year = d.getFullYear();
+          const month = String(d.getMonth() + 1).padStart(2, "0");
+          const day = String(d.getDate()).padStart(2, "0");
+
+          payload.payment_date = `${year}-${month}-${day}`;
+        } else {
+          payload.payment_date = null;
+        }
+      }
+
+      // ❌ Never overwrite ID
       delete payload.id;
 
-      // ✅ SYSTEM FIELDS
+      // ✅ System fields
       payload.is_imported = 1;
 
-      // ✅ ALWAYS SET FROM WAREHOUSE (SAFE FALLBACK)
+      // ✅ Fill from warehouse
       payload.warehouse_type = w.warehouse_type_name;
       payload.warehouse_owner_name = w.warehouse_owner_name;
       payload.gst_no = w.gst_no;
 
-      // ✅ IMPORTANT FIX (THIS WAS BREAKING YOUR DATA)
       payload.scheme = payload.scheme ?? w.scheme;
       payload.scheme_rate_amount =
         payload.scheme_rate_amount ?? w.scheme_rate_amount;
@@ -341,17 +434,19 @@ exports.bulkInsertPayments = async (req, res) => {
       payload.pan_card_holder = w.pan_card_holder;
       payload.pan_card_number = w.pan_card_number;
 
-      // 🔥 MODE: INSERT ONLY (NO CHECK)
+      // 🔥 INSERT MODE
       if (mode === "insert") {
         await pool.query(`INSERT INTO payments SET ?`, [payload]);
         inserted++;
         continue;
       }
 
-      // 🔥 MODE: UPDATE (EXISTING LOGIC)
+      // 🔥 UPDATE MODE
+      const recordId = row.id || row.sr_no;
+
       const [existingRows] = await pool.query(
         "SELECT * FROM payments WHERE id = ?",
-        [row.id]
+        [recordId]
       );
 
       if (existingRows.length > 0) {
@@ -360,8 +455,22 @@ exports.bulkInsertPayments = async (req, res) => {
         let isChanged = false;
 
         for (const key in payload) {
-          const existingVal = existing[key]?.toString().trim() || "";
-          const newVal = payload[key]?.toString().trim() || "";
+          let existingVal = existing[key];
+          let newVal = payload[key];
+
+          // ✅ Special handling for payment_date
+          if (key === "payment_date") {
+            existingVal = existingVal
+              ? `${new Date(existingVal).getFullYear()}-${String(new Date(existingVal).getMonth() + 1).padStart(2, "0")}-${String(new Date(existingVal).getDate()).padStart(2, "0")}`
+              : "";
+
+            newVal = newVal
+              ? `${new Date(newVal).getFullYear()}-${String(new Date(newVal).getMonth() + 1).padStart(2, "0")}-${String(new Date(newVal).getDate()).padStart(2, "0")}`
+              : "";
+          } else {
+            existingVal = existingVal?.toString().trim() || "";
+            newVal = newVal?.toString().trim() || "";
+          }
 
           if (existingVal !== newVal) {
             isChanged = true;
@@ -369,25 +478,21 @@ exports.bulkInsertPayments = async (req, res) => {
           }
         }
 
+        console.log("Updating ID:", recordId);
+        console.log("OLD DATE:", existing.payment_date);
+        console.log("NEW DATE:", payload.payment_date);
+
         if (isChanged) {
-          const updatePayload = {};
-
-          for (const key in payload) {
-            if (payload[key] !== undefined) {
-              updatePayload[key] = payload[key];
-            }
-          }
-
           await pool.query(
             "UPDATE payments SET ? WHERE id = ?",
-            [updatePayload, row.id]
+            [payload, recordId]
           );
 
           updated++;
-          updatedIds.push(row.id);
+          updatedIds.push(recordId);
         } else {
           skipped++;
-          skippedIds.push(row.id);
+          skippedIds.push(recordId);
         }
       } else {
         await pool.query(`INSERT INTO payments SET ?`, [payload]);
@@ -395,7 +500,6 @@ exports.bulkInsertPayments = async (req, res) => {
       }
     }
 
-    // ✅ FINAL MESSAGE BUILD
     let message = "";
 
     if (inserted > 0) {

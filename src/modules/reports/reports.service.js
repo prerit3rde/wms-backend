@@ -7,7 +7,7 @@ exports.getFinancialYears = async () => {
   return rows;
 };
 
-exports.getFilteredPayments = async ({ reportType, financialYear, month }) => {
+exports.getFilteredPayments = async ({ reportType, financialYear, month, cropYear }) => {
   let field = "";
 
   switch (reportType) {
@@ -39,6 +39,11 @@ exports.getFilteredPayments = async ({ reportType, financialYear, month }) => {
   if (month) {
     query += ` AND month = ?`;
     values.push(month);
+  }
+
+  if (cropYear) {
+    query += ` AND crop_year = ?`;
+    values.push(cropYear);
   }
 
   const [rows] = await pool.query(query, values); // ✅ FIXED
