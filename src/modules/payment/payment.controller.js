@@ -1,6 +1,18 @@
 const paymentService = require("./payment.service");
 const { createPaymentSchema } = require("./payment.validation");
 const pool = require("../../config/db");
+// const { convertKrutiToUnicode } = require("../../../utils/krutiConverter.js");
+const kru2uni = require("@anthro-ai/krutidev-unicode");
+
+const convertHindi = (val) => {
+  if (!val) return val;
+
+  try {
+    return kru2uni(val);
+  } catch (e) {
+    return val;
+  }
+};
 
 /* ================= CREATE ================= */
 
@@ -232,6 +244,48 @@ const normalizeRow = (row) => {
   return newRow;
 };
 
+const ALL_COLUMNS = [
+  "bill_type",
+  "district_name",
+  "branch_name",
+  "warehouse_name",
+  "warehouse_type",
+  "commodity",
+  "crop_year",
+  "rate",
+  "depositers_name",
+  "pan_card_holder",
+  "pan_card_number",
+  "warehouse_no",
+  "bill_amount",
+  "total_jv_amount",
+  "actual_passed_amount",
+  "tds",
+  "emi_amount",
+  "amount_deducted_against_gain_loss",
+  "penalty",
+  "medicine",
+  "emi_fdr_interest",
+  "gain_shortage_deduction",
+  "stock_shortage_deduction",
+  "bank_solvancy",
+  "insurance",
+  "other_deduction_amount",
+  "other_deductions_reason",
+  "pay_to_jvs_amount",
+  "security_fund_amount",
+  "payment_by",
+  "payment_date",
+  "qtr",
+  "remarks",
+  "from_date",
+  "to_date",
+  "financial_year",
+  "month",
+  "deduction_20_percent",
+  "is_imported"
+];
+
 exports.bulkInsertPayments = async (req, res) => {
   try {
     const { data, mode = "update" } = req.body;
@@ -240,291 +294,235 @@ exports.bulkInsertPayments = async (req, res) => {
 
     const typeMap = {};
     types.forEach((t) => {
-      typeMap[t.name] = t.id;
+      typeMap[t.name.trim().toLowerCase()] = t.id;
     });
 
     let inserted = 0;
     let updated = 0;
     let skipped = 0;
 
-    let updatedIds = [];
-    let skippedIds = [];
-
     const clean = (val) => val?.toString().trim();
 
     const normalizeRow = (row) => {
       const newRow = {};
+
       Object.keys(row).forEach((key) => {
         const cleanKey = key
           .toString()
           .trim()
           .toLowerCase()
-          .replace(/\s+/g, "_");
+          .replace(/\s+/g, "_")
+          .replace(/[.%()]/g, "")
+          .replace(/__+/g, "_");
 
-        newRow[cleanKey] = row[key];
+        let finalKey = cleanKey;
+
+        if (cleanKey === "pan_card_numbar") finalKey = "pan_card_number";
+        if (cleanKey === "commidity") finalKey = "commodity";
+        if (cleanKey === "gdn_no" || cleanKey === "gdn_no.")
+          finalKey = "warehouse_no";
+
+        newRow[finalKey] = row[key];
       });
+
       return newRow;
     };
 
+    const convertPeriod = (row, payload) => {
+      if (!row.period || payload.from_date) return;
+
+      const [mon, yr] = row.period.split("-");
+      if (!mon || !yr) return;
+
+      const monthMap = {
+        jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+        jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+      };
+
+      const m = mon.toLowerCase();
+
+      if (monthMap[m] !== undefined) {
+        const year = parseInt("20" + yr);
+
+        const firstDay = new Date(year, monthMap[m], 1);
+        const lastDay = new Date(year, monthMap[m] + 1, 0);
+
+        const formatLocalDate = (d) => {
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, "0");
+          const day = String(d.getDate()).padStart(2, "0");
+          return `${y}-${m}-${day}`;
+        };
+
+        payload.from_date = formatLocalDate(firstDay);
+        payload.to_date = formatLocalDate(lastDay);
+        payload.month = firstDay.toLocaleString("en-IN", { month: "long" });
+
+        let fyStart = year;
+        let fyEnd = year + 1;
+
+        if (monthMap[m] < 3) {
+          fyStart = year - 1;
+          fyEnd = year;
+        }
+
+        payload.financial_year = `${fyStart}-${String(fyEnd).slice(-2)}`;
+      }
+    };
+
+    // =====================================================
+    // 🚀 INSERT MODE
+    // =====================================================
+    if (mode === "insert") {
+      const batchSize = 500;
+      const finalValues = [];
+
+      for (let row of data) {
+        row = normalizeRow(row);
+        delete row.sr_no;
+
+        const payload = {
+          ...row,
+          is_imported: 1,
+        };
+
+        convertPeriod(row, payload);
+
+        // ✅ FIXED: CROP YEAR LOGIC
+        if (row.crop_year) {
+          payload.crop_year = row.crop_year;
+        } else if (row.commodity) {
+          const match = row.commodity.match(/-(\d{2,4})$/);
+          if (match) {
+            const yrStr = match[1];
+            const yr = parseInt(yrStr.slice(-2)); // handle both 2 and 4 digit years
+            const fullYear = 2000 + yr;
+            payload.crop_year = `${fullYear - 1}-${String(fullYear).slice(-2)}`;
+          }
+        }
+
+        const cleanRow = {};
+
+        ALL_COLUMNS.forEach((col) => {
+          cleanRow[col] = payload[col] ?? null;
+        });
+
+        const values = ALL_COLUMNS.map((col) => cleanRow[col]);
+
+        if (values.every((v) => v === null || v === "")) continue;
+
+        finalValues.push(values);
+      }
+
+      for (let i = 0; i < finalValues.length; i += batchSize) {
+        const chunk = finalValues.slice(i, i + batchSize);
+
+        await pool.query(
+          `INSERT INTO payments (${ALL_COLUMNS.join(",")}) VALUES ?`,
+          [chunk]
+        );
+      }
+
+      return res.json({
+        success: true,
+        inserted: finalValues.length,
+        updated: 0,
+        skipped: 0,
+      });
+    }
+
+    // =====================================================
+    // 🔁 UPDATE MODE (🔥 MAIN FIX HERE)
+    // =====================================================
     for (let row of data) {
       row = normalizeRow(row);
 
-      // ✅ Fix warehouse_owner mapping
-      if (row.warehouse_owner) {
-        row.warehouse_owner_name = row.warehouse_owner;
-        delete row.warehouse_owner;
+      row.warehouse_name = convertHindi(row.warehouse_name);
+      row.branch_name = convertHindi(row.branch_name);
+
+      delete row.sr_no;
+
+      const payload = {
+        ...row,
+        is_imported: 1,
+      };
+
+      convertPeriod(row, payload);
+
+      // ✅🔥 CRITICAL FIX: ADD THIS BLOCK
+      if (row.crop_year) {
+        payload.crop_year = row.crop_year;
+      } else if (row.commodity) {
+        const match = row.commodity.match(/-(\d{2,4})$/);
+        if (match) {
+          const yrStr = match[1];
+          const yr = parseInt(yrStr.slice(-2));
+          const fullYear = 2000 + yr;
+          payload.crop_year = `${fullYear - 1}-${String(fullYear).slice(-2)}`;
+        }
       }
 
-      const typeId = typeMap[clean(row.warehouse_type)];
+      // ✅ DEBUG (remove after testing)
+      console.log("Saving crop year:", payload.crop_year);
 
-      if (!typeId) {
-        throw new Error(`Invalid warehouse type: ${row.warehouse_type}`);
-      }
+      const typeId = typeMap[clean(row.warehouse_type)?.toLowerCase()];
 
       const [warehouse] = await pool.query(
-        `SELECT w.*, wt.name as warehouse_type_name
-         FROM warehouses w
-         JOIN warehouse_types wt ON w.warehouse_type_id = wt.id
-         WHERE TRIM(LOWER(w.district_name)) = TRIM(LOWER(?))
-         AND TRIM(LOWER(w.branch_name)) = TRIM(LOWER(?))
-         AND w.warehouse_type_id = ?
-         AND TRIM(LOWER(w.warehouse_name)) = TRIM(LOWER(?))
-         AND TRIM(w.warehouse_no) = TRIM(?)`,
+        `SELECT * FROM warehouses 
+         WHERE LOWER(TRIM(district_name))=? 
+         AND LOWER(TRIM(branch_name))=? 
+         AND warehouse_type_id=? 
+         AND LOWER(TRIM(warehouse_name))=? 
+         LIMIT 1`,
         [
           clean(row.district_name),
           clean(row.branch_name),
           typeId,
           clean(row.warehouse_name),
-          clean(row.warehouse_no),
         ]
       );
 
       if (!warehouse.length) {
-        throw new Error(`Warehouse not found: ${row.warehouse_name}`);
-      }
-
-      const w = warehouse[0];
-
-      const payload = {};
-
-      const allowedFields = [
-        "district_name",
-        "branch_name",
-        "warehouse_name",
-        "warehouse_owner_name",
-        "warehouse_type",
-        "warehouse_no",
-        "gst_no",
-        "scheme",
-        "scheme_rate_amount",
-        "actual_storage_capacity",
-        "approved_storage_capacity",
-        "bank_solvency_affidavit_amount",
-        "bank_solvency_certificate_amount",
-        "bank_solvency_deduction_by_bill",
-        "bank_solvency_balance",
-        "total_emi",
-        "emi_deduction_by_bill",
-        "emi_balance",
-        "pan_card_holder",
-        "pan_card_number",
-        "rent_bill_number",
-        "bill_type",
-        "month",
-        "financial_year",
-        "from_date",
-        "to_date",
-        "commodity",
-        "crop_year",
-        "rate",
-        "total_jv_amount",
-        "bill_amount",
-        "actual_passed_amount",
-        "depositers_name",
-        "scientific_capacity",
-        "number_of_days",
-        "per_day_rate",
-        "rent_amount_on_scientific_capacity",
-        "tds",
-        "amount_deducted_against_gain_loss",
-        "emi_amount",
-        "deduction_20_percent",
-        "penalty",
-        "medicine",
-        "emi_fdr_interest",
-        "gain_shortage_deduction",
-        "stock_shortage_deduction",
-        "bank_solvancy",
-        "insurance",
-        "other_deduction_amount",
-        "other_deductions_reason",
-        "pay_to_jvs_amount",
-        "security_fund_amount",
-        "payment_by",
-        "payment_date",
-        "qtr",
-        "remarks",
-      ];
-
-      // ✅ Build payload
-      Object.keys(row).forEach((key) => {
-        if (key === "sr_no") return;
-
-        if (allowedFields.includes(key) && row[key] !== "" && row[key] !== undefined) {
-          payload[key] = row[key];
-        }
-      });
-
-      // ✅ 🔥 FIX: Convert payment_date AFTER payload build
-      if (payload.payment_date) {
-        const d = new Date(payload.payment_date);
-
-        if (!isNaN(d)) {
-          const year = d.getFullYear();
-          const month = String(d.getMonth() + 1).padStart(2, "0");
-          const day = String(d.getDate()).padStart(2, "0");
-
-          payload.payment_date = `${year}-${month}-${day}`;
-        } else {
-          payload.payment_date = null;
-        }
-      }
-
-      // ❌ Never overwrite ID
-      delete payload.id;
-
-      // ✅ System fields
-      payload.is_imported = 1;
-
-      // ✅ Fill from warehouse
-      payload.warehouse_type = w.warehouse_type_name;
-      payload.warehouse_owner_name = w.warehouse_owner_name;
-      payload.gst_no = w.gst_no;
-
-      payload.scheme = payload.scheme ?? w.scheme;
-      payload.scheme_rate_amount =
-        payload.scheme_rate_amount ?? w.scheme_rate_amount;
-
-      payload.actual_storage_capacity =
-        payload.actual_storage_capacity ?? w.actual_storage_capacity;
-
-      payload.approved_storage_capacity =
-        payload.approved_storage_capacity ?? w.approved_storage_capacity;
-
-      payload.bank_solvency_affidavit_amount =
-        payload.bank_solvency_affidavit_amount ??
-        w.bank_solvency_affidavit_amount;
-
-      payload.bank_solvency_certificate_amount =
-        payload.bank_solvency_certificate_amount ??
-        w.bank_solvency_certificate_amount;
-
-      payload.bank_solvency_deduction_by_bill =
-        payload.bank_solvency_deduction_by_bill ??
-        w.bank_solvency_deduction_by_bill;
-
-      payload.bank_solvency_balance =
-        payload.bank_solvency_balance ?? w.bank_solvency_balance;
-
-      payload.total_emi = payload.total_emi ?? w.total_emi;
-      payload.emi_deduction_by_bill =
-        payload.emi_deduction_by_bill ?? w.emi_deduction_by_bill;
-      payload.emi_balance = payload.emi_balance ?? w.emi_balance;
-
-      payload.pan_card_holder = w.pan_card_holder;
-      payload.pan_card_number = w.pan_card_number;
-
-      // 🔥 INSERT MODE
-      if (mode === "insert") {
-        await pool.query(`INSERT INTO payments SET ?`, [payload]);
-        inserted++;
+        skipped++;
         continue;
       }
 
-      // 🔥 UPDATE MODE
-      const recordId = row.id || row.sr_no;
-
-      const [existingRows] = await pool.query(
-        "SELECT * FROM payments WHERE id = ?",
-        [recordId]
+      const [existing] = await pool.query(
+        `SELECT * FROM payments 
+         WHERE LOWER(TRIM(district_name))=? 
+         AND LOWER(TRIM(branch_name))=? 
+         AND LOWER(TRIM(warehouse_name))=? 
+         AND DATE(from_date)=DATE(?) 
+         LIMIT 1`,
+        [
+          clean(row.district_name),
+          clean(convertHindi(row.branch_name)),
+          clean(convertHindi(row.warehouse_name)),
+          payload.from_date,
+        ]
       );
 
-      if (existingRows.length > 0) {
-        const existing = existingRows[0];
-
-        let isChanged = false;
-
-        for (const key in payload) {
-          let existingVal = existing[key];
-          let newVal = payload[key];
-
-          // ✅ Special handling for payment_date
-          if (key === "payment_date") {
-            existingVal = existingVal
-              ? `${new Date(existingVal).getFullYear()}-${String(new Date(existingVal).getMonth() + 1).padStart(2, "0")}-${String(new Date(existingVal).getDate()).padStart(2, "0")}`
-              : "";
-
-            newVal = newVal
-              ? `${new Date(newVal).getFullYear()}-${String(new Date(newVal).getMonth() + 1).padStart(2, "0")}-${String(new Date(newVal).getDate()).padStart(2, "0")}`
-              : "";
-          } else {
-            existingVal = existingVal?.toString().trim() || "";
-            newVal = newVal?.toString().trim() || "";
-          }
-
-          if (existingVal !== newVal) {
-            isChanged = true;
-            break;
-          }
-        }
-
-        console.log("Updating ID:", recordId);
-        console.log("OLD DATE:", existing.payment_date);
-        console.log("NEW DATE:", payload.payment_date);
-
-        if (isChanged) {
-          await pool.query(
-            "UPDATE payments SET ? WHERE id = ?",
-            [payload, recordId]
-          );
-
-          updated++;
-          updatedIds.push(recordId);
-        } else {
-          skipped++;
-          skippedIds.push(recordId);
-        }
+      if (existing.length) {
+        await pool.query(
+          "UPDATE payments SET ? WHERE id=?",
+          [payload, existing[0].id]
+        );
+        updated++;
       } else {
-        await pool.query(`INSERT INTO payments SET ?`, [payload]);
-        inserted++;
+        skipped++;
       }
-    }
-
-    let message = "";
-
-    if (inserted > 0) {
-      message += `${inserted} payments inserted successfully. `;
-    }
-
-    if (updated > 0) {
-      message += `${updated} payments updated (IDs: ${updatedIds.join(", ")}). `;
-    }
-
-    if (skipped > 0) {
-      message += `${skipped} payments already exist (IDs: ${skippedIds.join(", ")}).`;
     }
 
     res.json({
       success: true,
-      message: message || "No changes detected",
-      stats: { inserted, updated, skipped },
+      message: `Inserted: ${inserted}, Updated: ${updated}, Skipped: ${skipped}`,
     });
 
   } catch (err) {
     console.error(err);
     res.status(500).json({
       success: false,
-      message: err.message || "Import failed",
+      message: err.message,
     });
   }
 };

@@ -1,10 +1,18 @@
 const pool = require("../../config/db");
 
 exports.getFinancialYears = async () => {
-  const [rows] = await pool.query(
-    "SELECT DISTINCT financial_year FROM payments ORDER BY financial_year DESC"
+  const [fyRows] = await pool.query(
+    "SELECT DISTINCT financial_year FROM payments WHERE financial_year IS NOT NULL AND financial_year != '' ORDER BY financial_year DESC"
   );
-  return rows;
+  
+  const [cyRows] = await pool.query(
+    "SELECT DISTINCT crop_year FROM payments WHERE crop_year IS NOT NULL AND crop_year != '' ORDER BY crop_year DESC"
+  );
+
+  return {
+    financialYears: fyRows.map(r => r.financial_year),
+    cropYears: cyRows.map(r => r.crop_year)
+  };
 };
 
 exports.getFilteredPayments = async ({ reportType, financialYear, month, cropYear }) => {
@@ -29,12 +37,17 @@ exports.getFilteredPayments = async ({ reportType, financialYear, month, cropYea
 
   let query = `
     SELECT * FROM payments
-    WHERE financial_year = ?
+    WHERE 1=1
     AND ${field} IS NOT NULL
     AND ${field} != 0
   `;
 
-  let values = [financialYear];
+  let values = [];
+
+  if (financialYear) {
+    query += ` AND financial_year = ?`;
+    values.push(financialYear);
+  }
 
   if (month) {
     query += ` AND month = ?`;
@@ -51,10 +64,10 @@ exports.getFilteredPayments = async ({ reportType, financialYear, month, cropYea
   return rows;
 };
 
-exports.saveReport = async ({ reportType, financialYear, filePath }) => {
+exports.saveReport = async ({ reportType, financialYear, month, cropYear, filePath }) => {
   const [result] = await pool.query(
-    "INSERT INTO reports (report_type, financial_year, file_path) VALUES (?, ?, ?)",
-    [reportType, financialYear, filePath]
+    "INSERT INTO reports (report_type, financial_year, month, crop_year, file_path) VALUES (?, ?, ?, ?, ?)",
+    [reportType, financialYear, month, cropYear, filePath]
   );
 
   return result;
@@ -62,7 +75,7 @@ exports.saveReport = async ({ reportType, financialYear, filePath }) => {
 
 exports.getAllReports = async () => {
   const [rows] = await pool.query(
-    "SELECT * FROM reports ORDER BY created_at DESC"
+    "SELECT * FROM reports ORDER BY id DESC"
   );
   return rows;
 };

@@ -70,6 +70,10 @@ exports.getPaymentFilters = async () => {
     `SELECT DISTINCT warehouse_type FROM payments`
   );
 
+  const [cropYears] = await db.query(
+    `SELECT DISTINCT crop_year FROM payments WHERE crop_year IS NOT NULL AND crop_year != ''`
+  );
+  
   const [statuses] = await db.query(
     `SELECT DISTINCT status FROM payments`
   );
@@ -80,6 +84,7 @@ exports.getPaymentFilters = async () => {
     warehouseNames: warehouses,
     warehouseTypes: types,
     statuses,
+    cropYears: cropYears.map(c => c.crop_year),
   };
 };
 

@@ -48,6 +48,8 @@ exports.generateReport = async (req, res) => {
     await reportService.saveReport({
       reportType,
       financialYear,
+      month,
+      cropYear,
       filePath,
     });
 
