@@ -336,17 +336,17 @@ exports.getWarehouses = async (queryParams) => {
 
     const [countResult] = await pool.query(countQuery, countValues);
 
-    const map = {};
+    const resultList = [];
+    const map = new Map();
 
     rows.forEach((row) => {
-      if (!map[row.id]) {
-        map[row.id] = {
+      if (!map.has(row.id)) {
+        const item = {
           id: row.id,
           district_name: row.district_name,
           branch_name: row.branch_name,
           warehouse_name: row.warehouse_name,
           warehouse_owner_name: row.warehouse_owner_name,
-          // warehouse_type_id: row.warehouse_type_id,
           warehouse_type: row.warehouse_type,
           warehouse_no: row.warehouse_no,
           gst_no: row.gst_no,
@@ -354,22 +354,22 @@ exports.getWarehouses = async (queryParams) => {
           pan_card_number: row.pan_card_number,
           cropData: [],
         };
+        map.set(row.id, item);
+        resultList.push(item);
       }
 
       if (row.crop_year) {
-        map[row.id].cropData.push({
+        map.get(row.id).cropData.push({
           crop_year: row.crop_year,
           scheme: row.scheme,
           scheme_rate_amount: row.scheme_rate_amount,
           actual_storage_capacity: row.actual_storage_capacity,
           approved_storage_capacity: row.approved_storage_capacity,
           is_affidavit: Boolean(row.is_affidavit),
-
           bank_solvency_affidavit_amount: row.bank_solvency_affidavit_amount,
           bank_solvency_certificate_amount: row.bank_solvency_certificate_amount,
           bank_solvency_deduction_by_bill: row.bank_solvency_deduction_by_bill,
           bank_solvency_balance_amount: row.bank_solvency_balance_amount,
-
           total_emi: row.total_emi,
           emi_deduction_by_bill: row.emi_deduction_by_bill,
           balance_amount_emi: row.balance_amount_emi,
@@ -378,7 +378,7 @@ exports.getWarehouses = async (queryParams) => {
     });
 
     return {
-      data: Object.values(map),
+      data: resultList,
       total: countResult[0].total,
     };
 
