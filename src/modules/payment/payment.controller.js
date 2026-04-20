@@ -449,7 +449,7 @@ exports.bulkInsertPayments = async (req, res) => {
 
       convertPeriod(row, payload);
 
-      // ✅🔥 CRITICAL FIX: ADD THIS BLOCK
+      // ✅ CROP YEAR LOGIC
       if (row.crop_year) {
         payload.crop_year = row.crop_year;
       } else if (row.commodity) {
@@ -462,50 +462,71 @@ exports.bulkInsertPayments = async (req, res) => {
         }
       }
 
-      // ✅ DEBUG (remove after testing)
-      console.log("Saving crop year:", payload.crop_year);
+      let existingRecordId = null;
 
-      const typeId = typeMap[clean(row.warehouse_type)?.toLowerCase()];
-
-      const [warehouse] = await pool.query(
-        `SELECT * FROM warehouses 
-         WHERE LOWER(TRIM(district_name))=? 
-         AND LOWER(TRIM(branch_name))=? 
-         AND warehouse_type_id=? 
-         AND LOWER(TRIM(warehouse_name))=? 
-         LIMIT 1`,
-        [
-          clean(row.district_name),
-          clean(row.branch_name),
-          typeId,
-          clean(row.warehouse_name),
-        ]
-      );
-
-      if (!warehouse.length) {
-        skipped++;
-        continue;
+      // 1️⃣ Priority Check: ID match (Most robust for exported sheets)
+      if (row.id && !isNaN(parseInt(row.id))) {
+        const [byId] = await pool.query("SELECT id FROM payments WHERE id = ? LIMIT 1", [row.id]);
+        if (byId.length) {
+          existingRecordId = byId[0].id;
+        }
       }
 
-      const [existing] = await pool.query(
-        `SELECT * FROM payments 
-         WHERE LOWER(TRIM(district_name))=? 
-         AND LOWER(TRIM(branch_name))=? 
-         AND LOWER(TRIM(warehouse_name))=? 
-         AND DATE(from_date)=DATE(?) 
-         LIMIT 1`,
-        [
-          clean(row.district_name),
-          clean(convertHindi(row.branch_name)),
-          clean(convertHindi(row.warehouse_name)),
-          payload.from_date,
-        ]
-      );
+      // 2️⃣ Fallback Check: Multi-column match (For manually created sheets)
+      if (!existingRecordId) {
+        const typeId = typeMap[clean(row.warehouse_type)?.toLowerCase()];
 
-      if (existing.length) {
+        const [warehouse] = await pool.query(
+          `SELECT id FROM warehouses 
+           WHERE LOWER(TRIM(district_name))=? 
+           AND LOWER(TRIM(branch_name))=? 
+           AND warehouse_type_id=? 
+           AND LOWER(TRIM(warehouse_name))=? 
+           LIMIT 1`,
+          [
+            clean(row.district_name),
+            clean(row.branch_name),
+            typeId,
+            clean(row.warehouse_name),
+          ]
+        );
+
+        if (warehouse.length) {
+          const [byMatch] = await pool.query(
+            `SELECT id FROM payments 
+             WHERE LOWER(TRIM(district_name))=? 
+             AND LOWER(TRIM(branch_name))=? 
+             AND LOWER(TRIM(warehouse_name))=? 
+             AND DATE(from_date)=DATE(?) 
+             LIMIT 1`,
+            [
+              clean(row.district_name),
+              clean(convertHindi(row.branch_name)),
+              clean(convertHindi(row.warehouse_name)),
+              payload.from_date,
+            ]
+          );
+          if (byMatch.length) {
+            existingRecordId = byMatch[0].id;
+          }
+        }
+      }
+
+      if (existingRecordId) {
+        // Only include columns that actually exist in the database
+        const updatePayload = {};
+        ALL_COLUMNS.forEach(col => {
+          if (payload[col] !== undefined) {
+            updatePayload[col] = payload[col];
+          }
+        });
+
+        // Ensure we don't try to update the ID
+        delete updatePayload.id;
+
         await pool.query(
-          "UPDATE payments SET ? WHERE id=?",
-          [payload, existing[0].id]
+          "UPDATE payments SET ? WHERE id = ?",
+          [updatePayload, existingRecordId]
         );
         updated++;
       } else {

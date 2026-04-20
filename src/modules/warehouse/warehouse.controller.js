@@ -3,52 +3,96 @@ const pool = require("../../config/db");
 const warehouseService = require("./warehouse.service");
 const kru2uni = require("@anthro-ai/krutidev-unicode");
 
+const ENGLISH_WHITELIST = [
+  "INDORE", "DHAR", "KHANDWA", "KHARGONE", "JHABUA", "BURHANPUR", "BADWANI", "BARWANI", "DEWAS", "RATLAM", "UJJAIN", "BHOPAL", "GWALIOR", "JABALPUR",
+  "WAREHOUSE", "LOGISTICS", "PARK", "AGRO", "PVT", "LTD", "PART", "GODOWN", "DISTRICT", "BRANCH", "EMI", "PAN", "HOLDER", "BILL", "NO", "NAME", "PMS", "WMS", "JVS", "SCHEME",
+  "SHREE", "SHRI", "SAMITI", "MARYADIT", "ADARSH", "SHAKARI", "VIPNAN", "DEPALPUR", "WARE", "HOUSE", "SUPPLY"
+];
+
 const convertHindi = (val) => {
-  if (!val) return val;
+  if (!val && val !== 0) return val;
   const str = val.toString().trim();
 
-  // 1. Single characters (A, B, C) or clearly English codes (A-Z, 0-9)
-  if (/^[A-Za-z0-9\s]$/.test(str)) return str;
+  const krutiDevMapping = {
+    "ftyk": "जिला",
+    "'kk[kk": "शाखा",
+    "osvjgkml": "वेअरहाउस",
+    ";kstuk": "योजना",
+    ";kstuk nj jkf'k": "योजना दर राशि",
+    "vuqcaf/kr HkaMkj.k {kerk": "अनुबंधित भंडारण क्षमता",
+    "okLrfod HkaMkj.k {kerk": "वास्तविक भंडारण क्षमता",
+    "okLrfod HkaMkj.k": "वास्तविक भंडारण",
+    "vuqca/k fnukad": "अनुबंध दिनांक",
+    "xksnke dzekad": "गोदाम क्रमांक",
+    "Bank Solvancy dk izek.k i= dh jkf'k": "Bank Solvancy का प्रमाण पत्र की राशि",
+    "Bank Solvancy ds 'kiFk i= dh jkf'k": "Bank Solvancy के शपथ पत्र की राशि",
+    "Bank Solvancy Diduction By Bill": "Bank Solvancy Diduction By Bill",
+    "Balance Amount Bank Solvancy": "Balance Amount Bank Solvancy",
+    "TOTAL EMI": "TOTAL EMI",
+    "EMI Diduction By Bill": "EMI Diduction By Bill",
+    "Balance Amount EMI": "Balance Amount EMI",
+    "Pan Card Holder": "Pan Card Holder",
+    "Pan Card No": "Pan Card No",
+    "'kiFk i=": "शपथ पत्र",
+    "izek.k i=": "प्रमाण पत्र",
+    "'kifk i=": "शपथ पत्र",
+    "izek.k i= ": "प्रमाण पत्र",
+    "vuqizkIr": "अनुप्राप्त",
+    "izkIr": "प्राप्त",
+    "izek.k i= 280000": "प्रमाण पत्र 280000",
+    "izek.k i= 450000": "प्रमाण पत्र 450000",
+  };
 
-  // 2. FORCED KRUTIDEV SIGNATURES
-  // Symbols like [ ] \ ; { } or starting with ' are almost exclusively KrutiDev in these sheets.
-  const hasKrutiDevSigns = /[\]\\[;{}]/.test(str) || str.startsWith("'");
-  if (hasKrutiDevSigns) {
+  const directMatch = krutiDevMapping[str];
+  if (directMatch) return directMatch;
+
+  // 0. Unicode Detection (Skip if already Devnagri)
+  if (/[\u0900-\u097F]/.test(str)) return str;
+
+  const hasKrutiMarkers = (s) => /[¼½¾[\]\\;{}/.]/.test(s);
+
+  const isTokenEnglish = (token) => {
+    const upper = token.toUpperCase();
+    if (ENGLISH_WHITELIST.some(word => upper.includes(word))) return true;
+    if (/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(upper)) return true;
+
+    // Pure numeric / codes protection
+    if (/^[0-9./_-]+$/.test(token)) return true;
+
+    const letters = token.replace(/[^a-zA-Z]/g, '');
+    if (letters.length <= 1) return true; // Keep single letters (A, B) as English
+
+    const vowels = (letters.match(/[aeiou]/gi) || []).length;
+    const ratio = vowels / letters.length;
+
+    // Increased thresholds to avoid misidentifying long KrutiDev tokens as English
+    if (ratio >= 0.35 && letters.length > 5 && !hasKrutiMarkers(token)) return true;
+    if (ratio >= 0.40 && !hasKrutiMarkers(token)) return true;
+
+    // Consecutive consonants check
+    if (/[b-df-hj-np-tv-z]{4,}/i.test(letters)) return false;
+
+    return ratio >= 0.25;
+  };
+
+  // Basic Format Protection (Numbers/Single chars)
+  if (str.length <= 1) return str;
+  if (!isNaN(str) && !isNaN(parseFloat(str))) return str;
+
+  const upperStr = str.toUpperCase();
+  // Initial check for whitelisted whole strings
+  if (ENGLISH_WHITELIST.some(word => upperStr.includes(word)) && !hasKrutiMarkers(str)) return str;
+
+  const parts = str.split(/(\s+)/);
+  return parts.map(part => {
+    if (!part.trim()) return part;
+    if (isTokenEnglish(part) && !hasKrutiMarkers(part)) return part;
     try {
-      return kru2uni(str).trim();
+      return kru2uni(part);
     } catch (e) {
-      return str;
+      return part;
     }
-  }
-
-  // 3. ENGLISH PROTECTION (Heuristic)
-  // - All Caps with spaces/numbers (Company names)
-  // - Mixed Case with healthy vowel ratio (People's names)
-  // - Common English warehouse terms
-  const isAllCaps = /^[A-Z0-9\s,./&()*'#_-]*$/.test(str) && str.length > 2;
-  const isProperName = /^[A-Z][a-z]+(\s[A-Z][a-z]+)*$/.test(str);
-
-  // Vowel Check: English names/words almost always have higher vowel density.
-  // KrutiDev strings often have very few or none in English vowel positions.
-  const vowels = (str.match(/[aeiou]/gi) || []).length;
-  const ratio = vowels / str.length;
-  const hasHealthyVowels = ratio > 0.20 || (vowels >= 2 && str.length < 15);
-
-  const commonEnglish = ["PART", "PMS", "PoS", "WAREHOUSE", "GODOWN", "District", "Branch", "Agro", "Logistics", "Park", "LLP", "EMI", "JVS", "WMS"];
-  const matchesCommon = commonEnglish.some(word => str.toUpperCase().includes(word.toUpperCase()));
-
-  // 4. PAN NUMBER DETECTION (5 letters, 4 numbers, 1 letter)
-  const isPan = /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(str.toUpperCase());
-
-  if (isPan || isAllCaps || isProperName || (hasHealthyVowels && str.length > 3) || matchesCommon) {
-    return str; // High confidence it's English
-  }
-
-  try {
-    return kru2uni(str).trim();
-  } catch (e) {
-    return str;
-  }
+  }).join("");
 };
 
 exports.getWarehouseFilters = async (req, res) => {
@@ -157,7 +201,7 @@ exports.bulkInsertWarehouses = async (req, res) => {
   try {
     await conn.beginTransaction();
 
-    const { data } = req.body;
+    const { data, default_crop_year } = req.body;
 
     if (!data || !data.length) {
       return res.status(400).json({ message: "No data provided" });
@@ -195,22 +239,25 @@ exports.bulkInsertWarehouses = async (req, res) => {
       // Normalize row keys and values
       Object.keys(row).forEach((key) => {
         const unicodeKey = convertHindi(key);
-        // FORCED conversion for key to be absolutely sure we catch KrutiDev headers
-        const forcedUnicodeKey = kru2uni(key.toString()).trim();
-
-        const normKey = normalizeString(unicodeKey);
-        const normForced = normalizeString(forcedUnicodeKey);
-        const normRaw = normalizeString(key);
+        const normKey = unicodeKey.replace(/\s+/g, "").toLowerCase();
+        const normRaw = key.toString().replace(/\s+/g, "").toLowerCase();
 
         const match = mapping.find(m => {
-          const mNorm = normalizeString(m.key);
-          const mUniNorm = normalizeString(convertHindi(m.key));
-          return mNorm === normKey || mNorm === normForced || mNorm === normRaw ||
-            mUniNorm === normKey || mUniNorm === normForced || mUniNorm === normRaw;
+          const mNorm = m.key.replace(/\s+/g, "").toLowerCase();
+          return mNorm === normKey || mNorm === normRaw;
         });
 
         if (match) {
-          mappedRow[match.field] = row[key]; // Capture RAW value for logic later
+          mappedRow[match.field] = row[key];
+        } else {
+          // One more try: check if key ALREADY matches a field name (from pre-mapped frontend data)
+          const isDbField = mapping.some(m => m.field === key) ||
+            ["is_affidavit", "bank_solvency_certificate_amount", "bank_solvency_affidavit_amount", "bs_type"].includes(key);
+          if (isDbField) {
+            mappedRow[key] = row[key];
+          } else if (normKey.includes("गोदाम") && (normKey.includes("क्रमांक") || normKey.includes("क्र"))) {
+            mappedRow.warehouse_no = row[key];
+          }
         }
       });
 
@@ -252,14 +299,19 @@ exports.bulkInsertWarehouses = async (req, res) => {
         if (dateObj && !isNaN(dateObj.getTime())) {
           const year = dateObj.getFullYear();
           const month = dateObj.getMonth() + 1; // 1-12
-          // As per user: 11/03/24 is 2024-25. 
-          // This implies January, February, March of Year belong to Year-(Year+1)?
-          // Or strictly the financial year mapping.
-          if (month <= 3) {
-            // Jan, Feb, Mar 2024 -> 2024-25 (As requested)
-            crop_year = `${year}-${(year + 1).toString().slice(-2)}`;
-          } else {
-            // April 2024 -> 2024-25 
+          crop_year = `${year}-${(year + 1).toString().slice(-2)}`;
+        }
+      }
+
+      // --- FALLBACK CROP YEAR if contract_date was missing/invalid ---
+      if (!crop_year && default_crop_year) {
+        // Validate that default_crop_year looks like "2024-25"
+        if (/^\d{4}-\d{2}$/.test(default_crop_year)) {
+          crop_year = default_crop_year;
+        } else {
+          // If it's just a year like "2024", format it
+          const year = parseInt(default_crop_year);
+          if (!isNaN(year)) {
             crop_year = `${year}-${(year + 1).toString().slice(-2)}`;
           }
         }
@@ -267,29 +319,37 @@ exports.bulkInsertWarehouses = async (req, res) => {
 
       console.log(`Processing Warehouse: ${warehouse_name}, Crop Year: ${crop_year}`);
 
-      // Bank Solvency Logic
-      let bank_solvency_certificate_amount = 0;
-      let bank_solvency_affidavit_amount = 0;
-      let is_affidavit = 0;
+      // Bank Solvency Logic (Refined)
+      // Only derive if NOT already provided in the mappedRow (e.g. from frontend)
+      let bank_solvency_certificate_amount = parseFloat(mappedRow.bank_solvency_certificate_amount) || 0;
+      let bank_solvency_affidavit_amount = parseFloat(mappedRow.bank_solvency_affidavit_amount) || 0;
+      let is_affidavit = mappedRow.is_affidavit !== undefined ? (mappedRow.is_affidavit ? 1 : 0) : 0;
 
-      // 🔥 CRITICAL FIX: Convert headers to Unicode BEFORE checking for "शपथ पत्र"
-      const rawBsHeader = mappedRow.bank_solvency_type_header?.toString() || "";
-      const unicodeBsHeader = convertHindi(rawBsHeader);
+      const hasBsPrepopulated = mappedRow.bank_solvency_certificate_amount !== undefined || mappedRow.bank_solvency_affidavit_amount !== undefined;
 
-      console.log(`Checking BS Header: "${rawBsHeader}" -> Unicode: "${unicodeBsHeader}"`);
+      if (!hasBsPrepopulated) {
+        const rawBsTypeString = mappedRow.bank_solvency_type_header?.toString() || "";
+        const unicodeBsType = convertHindi(rawBsTypeString);
+        const rawBsAmountFromColB = parseFloat(mappedRow.bank_solvency_affidavit_val?.toString().replace(/,/g, "")) || 0;
 
-      if (unicodeBsHeader.includes("शपथ पत्र")) {
-        is_affidavit = 1;
-        bank_solvency_affidavit_amount = parseFloat(mappedRow.bank_solvency_affidavit_val || 0) || 0;
-      } else if (unicodeBsHeader.includes("प्रमाण पत्र")) {
-        is_affidavit = 0;
-        // Extracts amount from header like "प्रमाण पत्र 450000"
-        const match = unicodeBsHeader.match(/(\d+)/);
-        if (match) {
-          bank_solvency_certificate_amount = parseFloat(match[1]) || 0;
+        if (unicodeBsType.includes("शपथ पत्र")) {
+          is_affidavit = 1;
+          bank_solvency_affidavit_amount = rawBsAmountFromColB;
+          bank_solvency_certificate_amount = 0;
+        } else if (unicodeBsType.includes("प्रमाण पत्र")) {
+          is_affidavit = 0;
+          const numericInCell = unicodeBsType.match(/(\d+)/);
+          if (numericInCell) {
+            bank_solvency_certificate_amount = parseFloat(numericInCell[1]);
+          } else {
+            bank_solvency_certificate_amount = rawBsAmountFromColB;
+          }
+          bank_solvency_affidavit_amount = 0;
         } else {
-          // Fallback if amount is in the other column but it's "प्रमाण पत्र"
-          bank_solvency_certificate_amount = parseFloat(mappedRow.bank_solvency_affidavit_val || 0) || 0;
+          const fallbackAmt = rawBsAmountFromColB || parseFloat(unicodeBsType.replace(/[^\d.]/g, "")) || 0;
+          is_affidavit = 0;
+          bank_solvency_certificate_amount = fallbackAmt;
+          bank_solvency_affidavit_amount = 0;
         }
       }
 
