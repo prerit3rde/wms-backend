@@ -27,6 +27,14 @@ exports.getTypes = async () => {
   return rows;
 };
 
+/* GET DEFAULT */
+exports.getDefaultType = async () => {
+  const [rows] = await pool.query(
+    "SELECT * FROM warehouse_types WHERE is_default = 1 LIMIT 1"
+  );
+  return rows[0] || null;
+};
+
 /* UPDATE */
 exports.updateType = async (id, name) => {
   await pool.query(
@@ -35,10 +43,21 @@ exports.updateType = async (id, name) => {
   );
 };
 
+/* SET DEFAULT — only one can be default at a time */
+exports.setDefault = async (id) => {
+  await pool.query("UPDATE warehouse_types SET is_default = 0");
+  await pool.query("UPDATE warehouse_types SET is_default = 1 WHERE id = ?", [id]);
+};
+
 /* DELETE */
 exports.deleteType = async (id) => {
   await pool.query(
     "DELETE FROM warehouse_types WHERE id = ?",
     [id]
   );
+};
+
+/* UNSET DEFAULT */
+exports.unsetDefault = async (id) => {
+  await pool.query("UPDATE warehouse_types SET is_default = 0 WHERE id = ?", [id]);
 };

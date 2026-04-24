@@ -5,8 +5,17 @@ const controller = require("./warehouseType.controller");
 /* CREATE */
 router.post("/", controller.createType);
 
-/* GET */
+/* GET ALL */
 router.get("/", controller.getTypes);
+
+/* GET DEFAULT */
+router.get("/default", controller.getDefault);
+
+/* SET DEFAULT */
+router.patch("/:id/set-default", controller.setDefault);
+
+/* UNSET DEFAULT */
+router.patch("/:id/unset-default", controller.unsetDefault);
 
 /* UPDATE */
 router.put("/:id", controller.updateType);

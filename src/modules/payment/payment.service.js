@@ -4,7 +4,7 @@ const db = require("../../config/db");
 exports.createPayment = async (data) => {
   const billAmount = Number(data.bill_amount || 0);
 
-  const actualPassed = billAmount;
+  const actualPassed = Number(data.total_jv_amount || 0);
 
   const tds =
     data.tds !== undefined && data.tds !== ""
@@ -78,6 +78,10 @@ exports.getPaymentFilters = async () => {
     `SELECT DISTINCT status FROM payments`
   );
 
+  const [billTypes] = await db.query(
+    `SELECT DISTINCT bill_type FROM payments WHERE bill_type IS NOT NULL AND bill_type != ''`
+  );
+
   return {
     districts,
     branches,
@@ -85,6 +89,7 @@ exports.getPaymentFilters = async () => {
     warehouseTypes: types,
     statuses,
     cropYears: cropYears.map(c => c.crop_year),
+    billTypes: billTypes.map(b => b.bill_type),
   };
 };
 
@@ -103,6 +108,7 @@ exports.getAllPayments = async (queryParams) => {
   const from_date = queryParams.from_date || "";
   const to_date = queryParams.to_date || "";
   const crop_year = queryParams.crop_year || "";
+  const bill_type = queryParams.bill_type || "";
 
   let query = `SELECT * FROM payments WHERE 1=1`;
   let values = [];
@@ -117,10 +123,11 @@ exports.getAllPayments = async (queryParams) => {
         OR warehouse_type LIKE ?
         OR commodity LIKE ?
         OR depositers_name LIKE ?
+        OR remarks LIKE ?
       )
     `;
     const s = `%${search}%`;
-    values.push(s, s, s, s, s, s);
+    values.push(s, s, s, s, s, s, s);
   }
 
   /* FILTERS */
@@ -147,6 +154,11 @@ exports.getAllPayments = async (queryParams) => {
   if (crop_year) {
     query += ` AND crop_year = ?`;
     values.push(crop_year);
+  }
+
+  if (bill_type) {
+    query += ` AND bill_type = ?`;
+    values.push(bill_type);
   }
 
   /* DATE FILTER */
@@ -198,12 +210,14 @@ exports.getAllPayments = async (queryParams) => {
         district_name LIKE ?
         OR branch_name LIKE ?
         OR warehouse_name LIKE ?
+        OR warehouse_type LIKE ?
         OR commodity LIKE ?
-      OR depositers_name LIKE ?
+        OR depositers_name LIKE ?
+        OR remarks LIKE ?
       )
     `;
     const s = `%${search}%`;
-    countValues.push(s, s, s, s, s);
+    countValues.push(s, s, s, s, s, s, s);
   }
 
   if (district) {
@@ -234,6 +248,11 @@ exports.getAllPayments = async (queryParams) => {
   if (crop_year) {
     countQuery += ` AND crop_year = ?`;
     countValues.push(crop_year);
+  }
+
+  if (bill_type) {
+    countQuery += ` AND bill_type = ?`;
+    countValues.push(bill_type);
   }
 
   if (sort.startsWith("status_")) {
@@ -273,7 +292,7 @@ exports.getPaymentById = async (id) => {
 exports.updatePayment = async (id, data) => {
   const billAmount = Number(data.bill_amount || 0);
 
-  const actualPassed = billAmount;
+  const actualPassed = Number(data.total_jv_amount || 0);
 
   const tds =
     data.tds !== undefined && data.tds !== ""

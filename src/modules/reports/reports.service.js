@@ -15,7 +15,7 @@ exports.getFinancialYears = async () => {
   };
 };
 
-exports.getFilteredPayments = async ({ reportType, financialYear, month, cropYear }) => {
+exports.getFilteredPayments = async ({ reportType, financialYear, month, cropYear, warehouseName, billType, warehouseType, fromDate, toDate }) => {
   let field = "";
 
   switch (reportType) {
@@ -59,10 +59,32 @@ exports.getFilteredPayments = async ({ reportType, financialYear, month, cropYea
     values.push(cropYear);
   }
 
-  const [rows] = await pool.query(query, values); // ✅ FIXED
+  if (warehouseName) {
+    query += ` AND warehouse_name = ?`;
+    values.push(warehouseName);
+  }
+
+  if (billType) {
+    query += ` AND bill_type = ?`;
+    values.push(billType);
+  }
+
+  if (warehouseType) {
+    query += ` AND warehouse_type = ?`;
+    values.push(warehouseType);
+  }
+
+  // TDS-only date range filter — uses payment's created_at date
+  if (fromDate && toDate) {
+    query += ` AND DATE(created_at) >= ? AND DATE(created_at) <= ?`;
+    values.push(fromDate, toDate);
+  }
+
+  const [rows] = await pool.query(query, values);
 
   return rows;
 };
+
 
 exports.saveReport = async ({ reportType, financialYear, month, cropYear, filePath }) => {
   const [result] = await pool.query(

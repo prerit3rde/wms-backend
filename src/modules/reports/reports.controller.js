@@ -13,13 +13,18 @@ exports.getFinancialYears = async (req, res) => {
 
 exports.previewReport = async (req, res) => {
   try {
-    const { reportType, financialYear, month, cropYear } = req.query;
+    const { reportType, financialYear, month, cropYear, warehouseName, billType, warehouseType, fromDate, toDate } = req.query;
 
     const data = await reportService.getFilteredPayments({
       reportType,
       financialYear,
       month,
       cropYear,
+      warehouseName,
+      billType,
+      warehouseType,
+      fromDate,
+      toDate,
     });
 
     res.json({ success: true, data });
@@ -30,13 +35,18 @@ exports.previewReport = async (req, res) => {
 
 exports.generateReport = async (req, res) => {
   try {
-    const { reportType, financialYear, month, cropYear } = req.body;
+    const { reportType, financialYear, month, cropYear, warehouseName, billType, warehouseType, fromDate, toDate } = req.body;
 
     const data = await reportService.getFilteredPayments({
       reportType,
       financialYear,
       month,
       cropYear,
+      warehouseName,
+      billType,
+      warehouseType,
+      fromDate,
+      toDate,
     });
 
     const filePath = await exportService.generateExcel(

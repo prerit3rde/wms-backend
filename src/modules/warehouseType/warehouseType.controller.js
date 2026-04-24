@@ -43,6 +43,26 @@ exports.getTypes = async (req, res) => {
   }
 };
 
+/* GET DEFAULT */
+exports.getDefault = async (req, res) => {
+  try {
+    const data = await service.getDefaultType();
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/* SET DEFAULT */
+exports.setDefault = async (req, res) => {
+  try {
+    await service.setDefault(req.params.id);
+    res.json({ success: true, message: "Default warehouse type updated" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 /* UPDATE */
 exports.updateType = async (req, res) => {
   try {
@@ -83,5 +103,15 @@ exports.deleteType = async (req, res) => {
       success: false,
       message: error.message,
     });
+  }
+};
+
+/* UNSET DEFAULT */
+exports.unsetDefault = async (req, res) => {
+  try {
+    await service.unsetDefault(req.params.id);
+    res.json({ success: true, message: "Default warehouse type removed" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };

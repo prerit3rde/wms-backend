@@ -1,6 +1,7 @@
 const paymentService = require("./payment.service");
 const { createPaymentSchema } = require("./payment.validation");
 const pool = require("../../config/db");
+const warehouseTypeService = require("../warehouseType/warehouseType.service");
 // const { convertKrutiToUnicode } = require("../../../utils/krutiConverter.js");
 const kru2uni = require("@anthro-ai/krutidev-unicode");
 
@@ -321,6 +322,14 @@ exports.bulkInsertPayments = async (req, res) => {
         if (cleanKey === "commidity") finalKey = "commodity";
         if (cleanKey === "gdn_no" || cleanKey === "gdn_no.")
           finalKey = "warehouse_no";
+        if (cleanKey === "gain_shortage_deducton" || cleanKey === "gain_shortage_deduction")
+          finalKey = "gain_shortage_deduction";
+        if (cleanKey === "other" || cleanKey === "other_deduction")
+          finalKey = "other_deduction_amount";
+        if (cleanKey === "amount_deducted_against_gain")
+          finalKey = "amount_deducted_against_gain_loss";
+        if (cleanKey === "20_deduction_amount_against_gain" || cleanKey === "20_deduction_amount_against_1_gain")
+          finalKey = "deduction_20_percent";
 
         newRow[finalKey] = row[key];
       });
@@ -377,6 +386,12 @@ exports.bulkInsertPayments = async (req, res) => {
       const batchSize = 500;
       const finalValues = [];
 
+      // ✅ Fetch default warehouse type once
+      const defaultTypeRow = await warehouseTypeService.getDefaultType();
+      const defaultWarehouseType = defaultTypeRow?.name || null;
+
+      data.reverse();
+
       for (let row of data) {
         row = normalizeRow(row);
         delete row.sr_no;
@@ -385,6 +400,11 @@ exports.bulkInsertPayments = async (req, res) => {
           ...row,
           is_imported: 1,
         };
+
+        // ✅ Apply default warehouse type if missing in the sheet
+        if (!payload.warehouse_type && defaultWarehouseType) {
+          payload.warehouse_type = defaultWarehouseType;
+        }
 
         convertPeriod(row, payload);
 

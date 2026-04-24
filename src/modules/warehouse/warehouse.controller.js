@@ -273,7 +273,12 @@ exports.bulkInsertWarehouses = async (req, res) => {
       const warehouse_name = convertHindi(mappedRow.warehouse_name);
       const pan_card_holder = convertHindi(mappedRow.pan_card_holder);
       const warehouse_owner_name = warehouse_name;
-      const warehouse_type_id = 1;
+
+      // Get Default Warehouse Type ID from DB
+      const [defaultTypeRows] = await conn.query(
+        "SELECT id FROM warehouse_types WHERE is_default = 1 LIMIT 1"
+      );
+      const warehouse_type_id = defaultTypeRows.length > 0 ? defaultTypeRows[0].id : 1;
 
       // Crop Year Logic
       let crop_year = "";
