@@ -197,10 +197,7 @@ exports.updateWarehouse = async (req, res) => {
 };
 
 exports.bulkInsertWarehouses = async (req, res) => {
-  const conn = await pool.getConnection();
   try {
-    await conn.beginTransaction();
-
     const { data, default_crop_year } = req.body;
 
     if (!data || !data.length) {
@@ -228,15 +225,36 @@ exports.bulkInsertWarehouses = async (req, res) => {
       { key: "Pan Card No", field: "pan_card_number" },
     ];
 
-    const normalizeString = (s) => s?.toString().toLowerCase().replace(/\s+/g, "").trim() || "";
+    // PREFETCH WAREHOUSES
+    const [allWarehouses] = await pool.query(
+      "SELECT id, LOWER(TRIM(warehouse_name)) as w_name, LOWER(TRIM(district_name)) as d_name, LOWER(TRIM(branch_name)) as b_name FROM warehouses WHERE is_deleted = FALSE"
+    );
+    const existingWarehousesMap = new Map();
+    allWarehouses.forEach(w => {
+      existingWarehousesMap.set(`${w.w_name}|${w.d_name}|${w.b_name}`, w.id);
+    });
 
-    let inserted = 0;
-    let updated = 0;
+    // PREFETCH CROP DATA
+    const [allCropData] = await pool.query(
+      "SELECT id, warehouse_id, crop_year FROM warehouse_crop_data"
+    );
+    const existingCropDataMap = new Map();
+    allCropData.forEach(c => {
+      existingCropDataMap.set(`${c.warehouse_id}|${c.crop_year}`, c.id);
+    });
+
+    // Get Default Warehouse Type ID from DB
+    const [defaultTypeRows] = await pool.query(
+      "SELECT id FROM warehouse_types WHERE is_default = 1 LIMIT 1"
+    );
+    const default_warehouse_type_id = defaultTypeRows.length > 0 ? defaultTypeRows[0].id : 1;
+
+    // --- PARSE ALL DATA FIRST ---
+    const parsedRows = [];
 
     for (let row of data) {
       const mappedRow = {};
 
-      // Normalize row keys and values
       Object.keys(row).forEach((key) => {
         const unicodeKey = convertHindi(key);
         const normKey = unicodeKey.replace(/\s+/g, "").toLowerCase();
@@ -250,7 +268,6 @@ exports.bulkInsertWarehouses = async (req, res) => {
         if (match) {
           mappedRow[match.field] = row[key];
         } else {
-          // One more try: check if key ALREADY matches a field name (from pre-mapped frontend data)
           const isDbField = mapping.some(m => m.field === key) ||
             ["is_affidavit", "bank_solvency_certificate_amount", "bank_solvency_affidavit_amount", "bs_type"].includes(key);
           if (isDbField) {
@@ -262,35 +279,24 @@ exports.bulkInsertWarehouses = async (req, res) => {
       });
 
       if (!mappedRow.warehouse_name) {
-        console.log(`!!! SKIP ROW: warehouse_name not found. Available fields: ${Object.keys(mappedRow).join(', ')}`);
         continue;
       }
 
-      // --- DERIVE FIELDS ---
-      // We only convert Hindi for specific fields known to be Hindi
-      const district_name = convertHindi(mappedRow.district_name);
-      const branch_name = convertHindi(mappedRow.branch_name);
-      const warehouse_name = convertHindi(mappedRow.warehouse_name);
+      const district_name = convertHindi(mappedRow.district_name) || "";
+      const branch_name = convertHindi(mappedRow.branch_name) || "";
+      const warehouse_name = convertHindi(mappedRow.warehouse_name) || "";
       const pan_card_holder = convertHindi(mappedRow.pan_card_holder);
       const warehouse_owner_name = warehouse_name;
+      const warehouse_type_id = default_warehouse_type_id;
 
-      // Get Default Warehouse Type ID from DB
-      const [defaultTypeRows] = await conn.query(
-        "SELECT id FROM warehouse_types WHERE is_default = 1 LIMIT 1"
-      );
-      const warehouse_type_id = defaultTypeRows.length > 0 ? defaultTypeRows[0].id : 1;
-
-      // Crop Year Logic
       let crop_year = "";
       const rawDate = mappedRow.contract_date;
       if (rawDate) {
         let dateObj;
         const serial = parseFloat(rawDate);
         if (!isNaN(serial) && serial > 40000) {
-          // Excel numeric date (Approx > 2009)
           dateObj = new Date(Math.round((serial - 25569) * 86400 * 1000));
         } else {
-          // Attempt string parse "DD/MM/YY" or "DD/MM/YYYY"
           const parts = rawDate.toString().split("/");
           if (parts.length === 3) {
             const day = parseInt(parts[0]);
@@ -300,21 +306,16 @@ exports.bulkInsertWarehouses = async (req, res) => {
             dateObj = new Date(year, month, day);
           }
         }
-
         if (dateObj && !isNaN(dateObj.getTime())) {
           const year = dateObj.getFullYear();
-          const month = dateObj.getMonth() + 1; // 1-12
           crop_year = `${year}-${(year + 1).toString().slice(-2)}`;
         }
       }
 
-      // --- FALLBACK CROP YEAR if contract_date was missing/invalid ---
       if (!crop_year && default_crop_year) {
-        // Validate that default_crop_year looks like "2024-25"
         if (/^\d{4}-\d{2}$/.test(default_crop_year)) {
           crop_year = default_crop_year;
         } else {
-          // If it's just a year like "2024", format it
           const year = parseInt(default_crop_year);
           if (!isNaN(year)) {
             crop_year = `${year}-${(year + 1).toString().slice(-2)}`;
@@ -322,10 +323,6 @@ exports.bulkInsertWarehouses = async (req, res) => {
         }
       }
 
-      console.log(`Processing Warehouse: ${warehouse_name}, Crop Year: ${crop_year}`);
-
-      // Bank Solvency Logic (Refined)
-      // Only derive if NOT already provided in the mappedRow (e.g. from frontend)
       let bank_solvency_certificate_amount = parseFloat(mappedRow.bank_solvency_certificate_amount) || 0;
       let bank_solvency_affidavit_amount = parseFloat(mappedRow.bank_solvency_affidavit_amount) || 0;
       let is_affidavit = mappedRow.is_affidavit !== undefined ? (mappedRow.is_affidavit ? 1 : 0) : 0;
@@ -358,135 +355,149 @@ exports.bulkInsertWarehouses = async (req, res) => {
         }
       }
 
-      console.log(`   BS Result: is_affidavit=${is_affidavit}, AffAmt=${bank_solvency_affidavit_amount}, CertAmt=${bank_solvency_certificate_amount}`);
-
       const storage = parseFloat(mappedRow.storage_capacity || 0) || 0;
 
-      // 1. Process WAREHOUSES table
-      const [existingWarehouses] = await conn.query(
-        `SELECT id FROM warehouses 
-         WHERE LOWER(TRIM(warehouse_name)) = LOWER(TRIM(?))
-         AND LOWER(TRIM(district_name)) = LOWER(TRIM(?))
-         AND LOWER(TRIM(branch_name)) = LOWER(TRIM(?))
-         AND is_deleted = FALSE`,
-        [warehouse_name, district_name, branch_name]
-      );
+      parsedRows.push({
+        district_name, branch_name, warehouse_name, warehouse_owner_name, warehouse_type_id,
+        pan_card_holder, pan_card_number: mappedRow.pan_card_number, warehouse_no: mappedRow.warehouse_no,
+        crop_year, scheme: mappedRow.scheme,
+        scheme_rate_amount: parseFloat(mappedRow.scheme_rate_amount || 0) || 0,
+        storage, is_affidavit, bank_solvency_affidavit_amount, bank_solvency_certificate_amount,
+        bank_solvency_deduction_by_bill: parseFloat(mappedRow.bank_solvency_deduction_by_bill || 0) || 0,
+        bank_solvency_balance_amount: parseFloat(mappedRow.bank_solvency_balance_amount || 0) || 0,
+        total_emi: parseFloat(mappedRow.total_emi || 0) || 0,
+        emi_deduction_by_bill: parseFloat(mappedRow.emi_deduction_by_bill || 0) || 0,
+        balance_amount_emi: parseFloat(mappedRow.balance_amount_emi || 0) || 0,
+      });
+    }
 
-      let warehouseId;
-      if (existingWarehouses.length > 0) {
-        warehouseId = existingWarehouses[0].id;
-        await conn.query(
-          `UPDATE warehouses SET 
-            warehouse_owner_name = ?,
-            warehouse_type_id = ?,
-            warehouse_no = ?,
-            pan_card_holder = ?,
-            pan_card_number = ?,
-            is_imported = 1
-           WHERE id = ?`,
-          [
-            warehouse_owner_name,
-            warehouse_type_id,
-            mappedRow.warehouse_no,
-            pan_card_holder,
-            mappedRow.pan_card_number,
-            warehouseId,
-          ]
-        );
-        updated++;
-      } else {
-        const [insertResult] = await conn.query(
-          `INSERT INTO warehouses (
-            district_name, branch_name, warehouse_name, warehouse_owner_name, 
-            warehouse_type_id, warehouse_no, pan_card_holder, pan_card_number, is_imported
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-          [
-            district_name,
-            branch_name,
-            warehouse_name,
-            warehouse_owner_name,
-            warehouse_type_id,
-            mappedRow.warehouse_no,
-            pan_card_holder,
-            mappedRow.pan_card_number,
-          ]
-        );
-        warehouseId = insertResult.insertId;
-        inserted++;
-      }
+    // --- PHASE 1: BULK INSERT WAREHOUSES ---
+    const warehousesToInsert = [];
+    const newWarehousesMap = new Map();
 
-      // 2. Process WAREHOUSE_CROP_DATA table
-      if (crop_year) {
-        // Check if crop data exists for this year
-        const [existingCropData] = await conn.query(
-          `SELECT id FROM warehouse_crop_data 
-           WHERE warehouse_id = ? AND crop_year = ?`,
-          [warehouseId, crop_year]
-        );
-
-        const cropPayload = [
-          warehouseId,
-          crop_year,
-          mappedRow.scheme,
-          parseFloat(mappedRow.scheme_rate_amount || 0) || 0,
-          storage, // actual_storage_capacity
-          storage, // approved_storage_capacity
-          is_affidavit,
-          bank_solvency_affidavit_amount,
-          bank_solvency_certificate_amount,
-          parseFloat(mappedRow.bank_solvency_deduction_by_bill || 0) || 0,
-          parseFloat(mappedRow.bank_solvency_balance_amount || 0) || 0,
-          parseFloat(mappedRow.total_emi || 0) || 0,
-          parseFloat(mappedRow.emi_deduction_by_bill || 0) || 0,
-          parseFloat(mappedRow.balance_amount_emi || 0) || 0,
-        ];
-
-        if (existingCropData.length > 0) {
-          await conn.query(
-            `UPDATE warehouse_crop_data SET 
-              scheme = ?,
-              scheme_rate_amount = ?,
-              actual_storage_capacity = ?,
-              approved_storage_capacity = ?,
-              is_affidavit = ?,
-              bank_solvency_affidavit_amount = ?,
-              bank_solvency_certificate_amount = ?,
-              bank_solvency_deduction_by_bill = ?,
-              bank_solvency_balance_amount = ?,
-              total_emi = ?,
-              emi_deduction_by_bill = ?,
-              balance_amount_emi = ?
-             WHERE id = ?`,
-            [...cropPayload.slice(2), existingCropData[0].id]
-          );
-        } else {
-          await conn.query(
-            `INSERT INTO warehouse_crop_data (
-              warehouse_id, crop_year, scheme, scheme_rate_amount, 
-              actual_storage_capacity, approved_storage_capacity, is_affidavit,
-              bank_solvency_affidavit_amount, bank_solvency_certificate_amount,
-              bank_solvency_deduction_by_bill, bank_solvency_balance_amount,
-              total_emi, emi_deduction_by_bill, balance_amount_emi
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            cropPayload
-          );
-        }
+    for (let row of parsedRows) {
+      const wKey = `${row.warehouse_name.toLowerCase().trim()}|${row.district_name.toLowerCase().trim()}|${row.branch_name.toLowerCase().trim()}`;
+      if (!existingWarehousesMap.has(wKey) && !newWarehousesMap.has(wKey)) {
+        warehousesToInsert.push([
+          row.district_name, row.branch_name, row.warehouse_name, row.warehouse_owner_name, 
+          row.warehouse_type_id, row.warehouse_no, row.pan_card_holder, row.pan_card_number, 1
+        ]);
+        newWarehousesMap.set(wKey, true);
       }
     }
 
-    await conn.commit();
+    if (warehousesToInsert.length > 0) {
+      // Chunk bulk inserts just in case of huge sheets
+      const chunkSize = 500;
+      for (let i = 0; i < warehousesToInsert.length; i += chunkSize) {
+        const chunk = warehousesToInsert.slice(i, i + chunkSize);
+        await pool.query(
+          `INSERT INTO warehouses (district_name, branch_name, warehouse_name, warehouse_owner_name, warehouse_type_id, warehouse_no, pan_card_holder, pan_card_number, is_imported) VALUES ?`,
+          [chunk]
+        );
+      }
+      
+      // Refresh existing warehouses map to get newly inserted IDs
+      const [allWarehousesNew] = await pool.query(
+        "SELECT id, LOWER(TRIM(warehouse_name)) as w_name, LOWER(TRIM(district_name)) as d_name, LOWER(TRIM(branch_name)) as b_name FROM warehouses WHERE is_deleted = FALSE"
+      );
+      allWarehousesNew.forEach(w => {
+        existingWarehousesMap.set(`${w.w_name}|${w.d_name}|${w.b_name}`, w.id);
+      });
+    }
+
+    // --- PHASE 2: PIPELINED UPDATE WAREHOUSES ---
+    // Batch the updates to not overwhelm the connection pool
+    const updateWarehousePromises = [];
+    let updatedWarehousesCount = 0;
+    
+    // Track updated warehouses to avoid duplicate updates in same run
+    const updatedWarehousesSet = new Set(); 
+
+    for (let row of parsedRows) {
+      const wKey = `${row.warehouse_name.toLowerCase().trim()}|${row.district_name.toLowerCase().trim()}|${row.branch_name.toLowerCase().trim()}`;
+      const warehouseId = existingWarehousesMap.get(wKey);
+      
+      if (warehouseId && !updatedWarehousesSet.has(warehouseId)) {
+        updatedWarehousesSet.add(warehouseId);
+        updatedWarehousesCount++;
+        updateWarehousePromises.push(
+          pool.query(
+            `UPDATE warehouses SET warehouse_owner_name = ?, warehouse_type_id = ?, warehouse_no = ?, pan_card_holder = ?, pan_card_number = ?, is_imported = 1 WHERE id = ?`,
+            [row.warehouse_owner_name, row.warehouse_type_id, row.warehouse_no, row.pan_card_holder, row.pan_card_number, warehouseId]
+          )
+        );
+      }
+    }
+    
+    // Execute all updates concurrently in chunks of 20 to avoid overwhelming connection pool
+    const CONCURRENCY_LIMIT = 20;
+    for (let i = 0; i < updateWarehousePromises.length; i += CONCURRENCY_LIMIT) {
+      await Promise.all(updateWarehousePromises.slice(i, i + CONCURRENCY_LIMIT));
+    }
+
+    // --- PHASE 3: BULK INSERT / UPDATE CROP DATA ---
+    const cropDataToInsert = [];
+    const updateCropPromises = [];
+
+    for (let row of parsedRows) {
+      if (!row.crop_year) continue;
+
+      const wKey = `${row.warehouse_name.toLowerCase().trim()}|${row.district_name.toLowerCase().trim()}|${row.branch_name.toLowerCase().trim()}`;
+      const warehouseId = existingWarehousesMap.get(wKey);
+      
+      if (!warehouseId) continue; // Safety check
+
+      const cKey = `${warehouseId}|${row.crop_year}`;
+      const cropDataId = existingCropDataMap.get(cKey);
+
+      const cropPayloadVals = [
+        row.scheme, row.scheme_rate_amount, row.storage, row.storage, row.is_affidavit, 
+        row.bank_solvency_affidavit_amount, row.bank_solvency_certificate_amount,
+        row.bank_solvency_deduction_by_bill, row.bank_solvency_balance_amount, 
+        row.total_emi, row.emi_deduction_by_bill, row.balance_amount_emi
+      ];
+
+      if (cropDataId) {
+        updateCropPromises.push(
+          pool.query(
+            `UPDATE warehouse_crop_data SET scheme=?, scheme_rate_amount=?, actual_storage_capacity=?, approved_storage_capacity=?, is_affidavit=?, bank_solvency_affidavit_amount=?, bank_solvency_certificate_amount=?, bank_solvency_deduction_by_bill=?, bank_solvency_balance_amount=?, total_emi=?, emi_deduction_by_bill=?, balance_amount_emi=? WHERE id=?`,
+            [...cropPayloadVals, cropDataId]
+          )
+        );
+      } else {
+        cropDataToInsert.push([
+          warehouseId, row.crop_year, ...cropPayloadVals
+        ]);
+        // To prevent duplicate inserts for same crop year in same sheet
+        existingCropDataMap.set(cKey, -1); 
+      }
+    }
+
+    if (cropDataToInsert.length > 0) {
+      const chunkSize = 500;
+      for (let i = 0; i < cropDataToInsert.length; i += chunkSize) {
+        const chunk = cropDataToInsert.slice(i, i + chunkSize);
+        await pool.query(
+          `INSERT INTO warehouse_crop_data (warehouse_id, crop_year, scheme, scheme_rate_amount, actual_storage_capacity, approved_storage_capacity, is_affidavit, bank_solvency_affidavit_amount, bank_solvency_certificate_amount, bank_solvency_deduction_by_bill, bank_solvency_balance_amount, total_emi, emi_deduction_by_bill, balance_amount_emi) VALUES ?`,
+          [chunk]
+        );
+      }
+    }
+
+    for (let i = 0; i < updateCropPromises.length; i += CONCURRENCY_LIMIT) {
+      await Promise.all(updateCropPromises.slice(i, i + CONCURRENCY_LIMIT));
+    }
+
     res.json({
       success: true,
-      message: `Warehouses processed: ${inserted + updated} (Inserted: ${inserted}, Updated: ${updated})`,
+      message: `Warehouses processed successfully. Inserted: ${warehousesToInsert.length}, Updated: ${updatedWarehousesCount}`,
     });
   } catch (error) {
-    if (conn) await conn.rollback();
     console.error("IMPORT ERROR 👉", error);
     res.status(500).json({
       success: false,
       message: error.message,
     });
-  } finally {
-    if (conn) conn.release();
   }
 };
