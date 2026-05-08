@@ -9,13 +9,13 @@ exports.createPayment = async (data) => {
   const tds =
     data.tds !== undefined && data.tds !== ""
       ? Number(data.tds)
-      : billAmount * 0.1;
+      : actualPassed * 0.1;
 
   const deduction_20_percent =
     data.deduction_20_percent !== undefined &&
       data.deduction_20_percent !== ""
       ? Number(data.deduction_20_percent)
-      : billAmount * 0.2;
+      : actualPassed * 0.2;
 
   const totalDeductions =
     Number(data.tds || 0) +
@@ -31,7 +31,7 @@ exports.createPayment = async (data) => {
     Number(data.insurance || 0) +
     Number(data.other_deduction_amount || 0);
 
-  const pay_to_jvs_amount = billAmount - totalDeductions;
+  const pay_to_jvs_amount = actualPassed - totalDeductions;
 
   const payload = {
     ...data,
@@ -297,13 +297,13 @@ exports.updatePayment = async (id, data) => {
   const tds =
     data.tds !== undefined && data.tds !== ""
       ? Number(data.tds)
-      : billAmount * 0.1;
+      : actualPassed * 0.1;
 
   const deduction_20_percent =
     data.deduction_20_percent !== undefined &&
       data.deduction_20_percent !== ""
       ? Number(data.deduction_20_percent)
-      : billAmount * 0.2;
+      : actualPassed * 0.2;
 
   const totalDeductions =
     Number(data.tds || 0) +
@@ -319,7 +319,7 @@ exports.updatePayment = async (id, data) => {
     Number(data.insurance || 0) +
     Number(data.other_deduction_amount || 0);
 
-  const pay_to_jvs_amount = billAmount - totalDeductions;
+  const pay_to_jvs_amount = actualPassed - totalDeductions;
 
   const {
     id: paymentId,

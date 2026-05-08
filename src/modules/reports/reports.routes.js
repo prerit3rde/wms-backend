@@ -4,6 +4,7 @@ const controller = require("./reports.controller");
 const verifyToken = require("../../middlewares/auth.middleware")
 
 router.get("/financial-years", controller.getFinancialYears);
+router.get("/filters", controller.getFilters);
 router.get("/preview", controller.previewReport);
 router.post("/generate", controller.generateReport);
 router.get("/", controller.getReports);

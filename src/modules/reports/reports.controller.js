@@ -11,6 +11,26 @@ exports.getFinancialYears = async (req, res) => {
   }
 };
 
+exports.getFilters = async (req, res) => {
+  try {
+    const { reportType, financialYear, month, cropYear, warehouseName, billType, warehouseType } = req.query;
+
+    const filters = await reportService.getReportFilters({
+      reportType,
+      financialYear,
+      month,
+      cropYear,
+      warehouseName,
+      billType,
+      warehouseType
+    });
+
+    res.json({ success: true, data: filters });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 exports.previewReport = async (req, res) => {
   try {
     const { reportType, financialYear, month, cropYear, warehouseName, billType, warehouseType, fromDate, toDate } = req.query;

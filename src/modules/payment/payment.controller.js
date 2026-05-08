@@ -412,19 +412,47 @@ exports.bulkInsertPayments = async (req, res) => {
         if (row.crop_year) {
           payload.crop_year = row.crop_year;
         } else if (row.commodity) {
-          const match = row.commodity.match(/-(\d{2,4})$/);
-          if (match) {
-            const yrStr = match[1];
-            const yr = parseInt(yrStr.slice(-2)); // handle both 2 and 4 digit years
-            const fullYear = 2000 + yr;
-            payload.crop_year = `${fullYear - 1}-${String(fullYear).slice(-2)}`;
+          const rangeMatch = row.commodity.match(/(\d{4})[-\/\s]+(\d{2,4})/);
+          if (rangeMatch) {
+            const startYr = rangeMatch[1];
+            let endYr = rangeMatch[2];
+            if (endYr.length === 4) endYr = endYr.slice(-2);
+            payload.crop_year = `${startYr}-${endYr}`;
+          } else {
+            const singleMatch = row.commodity.match(/(\d{2,4})$/);
+            if (singleMatch) {
+              const yrStr = singleMatch[1];
+              let yr = parseInt(yrStr);
+              if (yrStr.length === 2) {
+                yr = yr < 50 ? 2000 + yr : 1900 + yr;
+              }
+              payload.crop_year = `${yr}-${String(yr + 1).slice(-2)}`;
+            }
           }
+        }
+
+        // ✅ FINANCIAL YEAR LOGIC
+        if (payload.payment_date) {
+          const pd = new Date(payload.payment_date);
+          if (!isNaN(pd)) {
+            const pMonth = pd.getMonth(); // 0-11
+            const pYear = pd.getFullYear();
+            if (pMonth >= 3) { // April or later
+              payload.financial_year = `${pYear}-${String(pYear + 1).slice(-2)}`;
+            } else {
+              payload.financial_year = `${pYear - 1}-${String(pYear).slice(-2)}`;
+            }
+          } else {
+            payload.financial_year = null;
+          }
+        } else {
+          payload.financial_year = null;
         }
 
         const cleanRow = {};
 
         ALL_COLUMNS.forEach((col) => {
-          cleanRow[col] = payload[col] ?? null;
+          cleanRow[col] = (payload[col] === "" || payload[col] === " ") ? null : (payload[col] ?? null);
         });
 
         const values = ALL_COLUMNS.map((col) => cleanRow[col]);
@@ -473,13 +501,41 @@ exports.bulkInsertPayments = async (req, res) => {
       if (row.crop_year) {
         payload.crop_year = row.crop_year;
       } else if (row.commodity) {
-        const match = row.commodity.match(/-(\d{2,4})$/);
-        if (match) {
-          const yrStr = match[1];
-          const yr = parseInt(yrStr.slice(-2));
-          const fullYear = 2000 + yr;
-          payload.crop_year = `${fullYear - 1}-${String(fullYear).slice(-2)}`;
+        const rangeMatch = row.commodity.match(/(\d{4})[-\/\s]+(\d{2,4})/);
+        if (rangeMatch) {
+          const startYr = rangeMatch[1];
+          let endYr = rangeMatch[2];
+          if (endYr.length === 4) endYr = endYr.slice(-2);
+          payload.crop_year = `${startYr}-${endYr}`;
+        } else {
+          const singleMatch = row.commodity.match(/(\d{2,4})$/);
+          if (singleMatch) {
+            const yrStr = singleMatch[1];
+            let yr = parseInt(yrStr);
+            if (yrStr.length === 2) {
+              yr = yr < 50 ? 2000 + yr : 1900 + yr;
+            }
+            payload.crop_year = `${yr}-${String(yr + 1).slice(-2)}`;
+          }
         }
+      }
+
+      // ✅ FINANCIAL YEAR LOGIC
+      if (payload.payment_date) {
+        const pd = new Date(payload.payment_date);
+        if (!isNaN(pd)) {
+          const pMonth = pd.getMonth(); // 0-11
+          const pYear = pd.getFullYear();
+          if (pMonth >= 3) { // April or later
+            payload.financial_year = `${pYear}-${String(pYear + 1).slice(-2)}`;
+          } else {
+            payload.financial_year = `${pYear - 1}-${String(pYear).slice(-2)}`;
+          }
+        } else {
+          payload.financial_year = null;
+        }
+      } else {
+        payload.financial_year = null;
       }
 
       let existingRecordId = null;
@@ -537,7 +593,7 @@ exports.bulkInsertPayments = async (req, res) => {
         const updatePayload = {};
         ALL_COLUMNS.forEach(col => {
           if (payload[col] !== undefined) {
-            updatePayload[col] = payload[col];
+            updatePayload[col] = (payload[col] === "" || payload[col] === " ") ? null : payload[col];
           }
         });
 
