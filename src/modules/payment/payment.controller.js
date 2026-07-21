@@ -2,18 +2,6 @@ const paymentService = require("./payment.service");
 const { createPaymentSchema } = require("./payment.validation");
 const pool = require("../../config/db");
 const warehouseTypeService = require("../warehouseType/warehouseType.service");
-// const { convertKrutiToUnicode } = require("../../../utils/krutiConverter.js");
-const kru2uni = require("@anthro-ai/krutidev-unicode");
-
-const convertHindi = (val) => {
-  if (!val) return val;
-
-  try {
-    return kru2uni(val);
-  } catch (e) {
-    return val;
-  }
-};
 
 /* ================= CREATE ================= */
 
@@ -485,9 +473,6 @@ exports.bulkInsertPayments = async (req, res) => {
     for (let row of data) {
       row = normalizeRow(row);
 
-      row.warehouse_name = convertHindi(row.warehouse_name);
-      row.branch_name = convertHindi(row.branch_name);
-
       delete row.sr_no;
 
       const payload = {
@@ -577,8 +562,8 @@ exports.bulkInsertPayments = async (req, res) => {
              LIMIT 1`,
             [
               clean(row.district_name),
-              clean(convertHindi(row.branch_name)),
-              clean(convertHindi(row.warehouse_name)),
+              clean(row.branch_name),
+              clean(row.warehouse_name),
               payload.from_date,
             ]
           );

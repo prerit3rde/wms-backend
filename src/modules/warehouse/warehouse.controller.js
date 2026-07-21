@@ -1,99 +1,10 @@
 const pool = require("../../config/db");
 
 const warehouseService = require("./warehouse.service");
-const kru2uni = require("@anthro-ai/krutidev-unicode");
 
-const ENGLISH_WHITELIST = [
-  "INDORE", "DHAR", "KHANDWA", "KHARGONE", "JHABUA", "BURHANPUR", "BADWANI", "BARWANI", "DEWAS", "RATLAM", "UJJAIN", "BHOPAL", "GWALIOR", "JABALPUR",
-  "WAREHOUSE", "LOGISTICS", "PARK", "AGRO", "PVT", "LTD", "PART", "GODOWN", "DISTRICT", "BRANCH", "EMI", "PAN", "HOLDER", "BILL", "NO", "NAME", "PMS", "WMS", "JVS", "SCHEME",
-  "SHREE", "SHRI", "SAMITI", "MARYADIT", "ADARSH", "SHAKARI", "VIPNAN", "DEPALPUR", "WARE", "HOUSE", "SUPPLY"
-];
-
-const convertHindi = (val) => {
-  if (!val && val !== 0) return val;
-  const str = val.toString().trim();
-
-  const krutiDevMapping = {
-    "ftyk": "जिला",
-    "'kk[kk": "शाखा",
-    "osvjgkml": "वेअरहाउस",
-    ";kstuk": "योजना",
-    ";kstuk nj jkf'k": "योजना दर राशि",
-    "vuqcaf/kr HkaMkj.k {kerk": "अनुबंधित भंडारण क्षमता",
-    "okLrfod HkaMkj.k {kerk": "वास्तविक भंडारण क्षमता",
-    "okLrfod HkaMkj.k": "वास्तविक भंडारण",
-    "vuqca/k fnukad": "अनुबंध दिनांक",
-    "xksnke dzekad": "गोदाम क्रमांक",
-    "Bank Solvancy dk izek.k i= dh jkf'k": "Bank Solvancy का प्रमाण पत्र की राशि",
-    "Bank Solvancy ds 'kiFk i= dh jkf'k": "Bank Solvancy के शपथ पत्र की राशि",
-    "Bank Solvancy Diduction By Bill": "Bank Solvancy Diduction By Bill",
-    "Balance Amount Bank Solvancy": "Balance Amount Bank Solvancy",
-    "TOTAL EMI": "TOTAL EMI",
-    "EMI Diduction By Bill": "EMI Diduction By Bill",
-    "Balance Amount EMI": "Balance Amount EMI",
-    "Pan Card Holder": "Pan Card Holder",
-    "Pan Card No": "Pan Card No",
-    "'kiFk i=": "शपथ पत्र",
-    "izek.k i=": "प्रमाण पत्र",
-    "'kifk i=": "शपथ पत्र",
-    "izek.k i= ": "प्रमाण पत्र",
-    "vuqizkIr": "अनुप्राप्त",
-    "izkIr": "प्राप्त",
-    "izek.k i= 280000": "प्रमाण पत्र 280000",
-    "izek.k i= 450000": "प्रमाण पत्र 450000",
-  };
-
-  const directMatch = krutiDevMapping[str];
-  if (directMatch) return directMatch;
-
-  // 0. Unicode Detection (Skip if already Devnagri)
-  if (/[\u0900-\u097F]/.test(str)) return str;
-
-  const hasKrutiMarkers = (s) => /[¼½¾[\]\\;{}/.]/.test(s);
-
-  const isTokenEnglish = (token) => {
-    const upper = token.toUpperCase();
-    if (ENGLISH_WHITELIST.some(word => upper.includes(word))) return true;
-    if (/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(upper)) return true;
-
-    // Pure numeric / codes protection
-    if (/^[0-9./_-]+$/.test(token)) return true;
-
-    const letters = token.replace(/[^a-zA-Z]/g, '');
-    if (letters.length <= 1) return true; // Keep single letters (A, B) as English
-
-    const vowels = (letters.match(/[aeiou]/gi) || []).length;
-    const ratio = vowels / letters.length;
-
-    // Increased thresholds to avoid misidentifying long KrutiDev tokens as English
-    if (ratio >= 0.35 && letters.length > 5 && !hasKrutiMarkers(token)) return true;
-    if (ratio >= 0.40 && !hasKrutiMarkers(token)) return true;
-
-    // Consecutive consonants check
-    if (/[b-df-hj-np-tv-z]{4,}/i.test(letters)) return false;
-
-    return ratio >= 0.25;
-  };
-
-  // Basic Format Protection (Numbers/Single chars)
-  if (str.length <= 1) return str;
-  if (!isNaN(str) && !isNaN(parseFloat(str))) return str;
-
-  const upperStr = str.toUpperCase();
-  // Initial check for whitelisted whole strings
-  if (ENGLISH_WHITELIST.some(word => upperStr.includes(word)) && !hasKrutiMarkers(str)) return str;
-
-  const parts = str.split(/(\s+)/);
-  return parts.map(part => {
-    if (!part.trim()) return part;
-    if (isTokenEnglish(part) && !hasKrutiMarkers(part)) return part;
-    try {
-      return kru2uni(part);
-    } catch (e) {
-      return part;
-    }
-  }).join("");
-};
+// KrutiDev → Unicode conversion has been removed. The application now stores
+// and displays the entered English text exactly as provided.
+const convertHindi = (val) => val;
 
 exports.getWarehouseFilters = async (req, res) => {
   try {

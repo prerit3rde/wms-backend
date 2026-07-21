@@ -153,6 +153,64 @@ exports.generateExcel = async (data, reportType, financialYear) => {
     });
   });
 
+  // ===================================================
+  // TOTALS ROW (respects the currently filtered/exported dataset)
+  // ===================================================
+  const numericKeys = [
+    "bill_amount",
+    "total_jv_amount",
+    "actual_passed_amount",
+    "tds",
+    "emi_amount",
+    "deduction_20_percent",
+    "penalty",
+    "medicine",
+    "emi_fdr_interest",
+    "gain_shortage_deduction",
+    "stock_shortage_deduction",
+    "bank_solvancy",
+    "insurance",
+    "other_deduction_amount",
+    "pay_to_jvs_amount",
+  ];
+
+  const totals = {};
+  numericKeys.forEach((key) => {
+    totals[key] = data.reduce(
+      (sum, item) => sum + Number(item[key] || 0),
+      0
+    );
+  });
+
+  // Build the totals row in the same column order as the data rows.
+  const totalRowData = {};
+  columns.forEach((col) => {
+    if (numericKeys.includes(col.key)) {
+      totalRowData[col.key] = totals[col.key];
+    } else if (col.key === "month") {
+      // Use the last text column before the amounts to hold the label.
+      totalRowData[col.key] = "TOTAL";
+    } else {
+      totalRowData[col.key] = "";
+    }
+  });
+
+  const totalRow = worksheet.addRow(Object.values(totalRowData));
+  totalRow.eachCell((cell) => {
+    cell.font = { name: "Times New Roman", size: 11, bold: true };
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFF2F2F2" },
+    };
+    cell.border = {
+      top: { style: "thin" },
+      bottom: { style: "thin" },
+      left: { style: "thin" },
+      right: { style: "thin" }
+    };
+  });
+
   // Column widths scaling
   columns.forEach((col, i) => {
     worksheet.getColumn(i + 1).width = col.width;

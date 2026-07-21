@@ -8,6 +8,8 @@ const warehouseTypeRoutes = require("./modules/warehouseType/warehouseType.route
 const dashboardRoutes = require("./modules/dashboard/dashboard.routes");
 const paymentRoutes = require("./modules/payment/payment.routes");
 const reportsRoutes = require("./modules/reports/reports.routes");
+const depositorRoutes = require("./modules/depositor/depositor.routes");
+const depositorService = require("./modules/depositor/depositor.service");
 const path = require("path");
 
 const app = express();
@@ -32,6 +34,13 @@ app.use("/api/warehouse-types", warehouseTypeRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/reports", reportsRoutes);
+app.use("/api/depositors", depositorRoutes);
+
+// Ensure the depositors table exists (idempotent) so the new module works
+// without requiring a separate manual migration step.
+depositorService
+  .ensureTable()
+  .catch((err) => console.error("Failed to ensure depositors table:", err.message));
 
 app.use(errorMiddleware);
 

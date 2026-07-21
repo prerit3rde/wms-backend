@@ -13,7 +13,7 @@ exports.getFinancialYears = async (req, res) => {
 
 exports.getFilters = async (req, res) => {
   try {
-    const { reportType, financialYear, month, cropYear, warehouseName, billType, warehouseType } = req.query;
+    const { reportType, financialYear, month, cropYear, warehouseName, warehouseBranch, billType, warehouseType } = req.query;
 
     const filters = await reportService.getReportFilters({
       reportType,
@@ -21,6 +21,7 @@ exports.getFilters = async (req, res) => {
       month,
       cropYear,
       warehouseName,
+      warehouseBranch,
       billType,
       warehouseType
     });
@@ -33,7 +34,7 @@ exports.getFilters = async (req, res) => {
 
 exports.previewReport = async (req, res) => {
   try {
-    const { reportType, financialYear, month, cropYear, warehouseName, billType, warehouseType, fromDate, toDate } = req.query;
+    const { reportType, financialYear, month, cropYear, warehouseName, warehouseBranch, billType, warehouseType, fromDate, toDate } = req.query;
 
     const data = await reportService.getFilteredPayments({
       reportType,
@@ -41,6 +42,7 @@ exports.previewReport = async (req, res) => {
       month,
       cropYear,
       warehouseName,
+      warehouseBranch,
       billType,
       warehouseType,
       fromDate,
@@ -55,7 +57,7 @@ exports.previewReport = async (req, res) => {
 
 exports.generateReport = async (req, res) => {
   try {
-    const { reportType, financialYear, month, cropYear, warehouseName, billType, warehouseType, fromDate, toDate } = req.body;
+    const { reportType, financialYear, month, cropYear, warehouseName, warehouseBranch, billType, warehouseType, fromDate, toDate } = req.body;
 
     const data = await reportService.getFilteredPayments({
       reportType,
@@ -63,6 +65,7 @@ exports.generateReport = async (req, res) => {
       month,
       cropYear,
       warehouseName,
+      warehouseBranch,
       billType,
       warehouseType,
       fromDate,
@@ -90,6 +93,50 @@ exports.generateReport = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/* ================= ADVISORY ================= */
+
+exports.getAdvisoryFilters = async (req, res) => {
+  try {
+    const { financialYear, month, cropYear, warehouseName, warehouseBranch, billType, warehouseType } = req.query;
+
+    const filters = await reportService.getAdvisoryFilters({
+      financialYear,
+      month,
+      cropYear,
+      warehouseName,
+      warehouseBranch,
+      billType,
+      warehouseType,
+    });
+
+    res.json({ success: true, data: filters });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.previewAdvisory = async (req, res) => {
+  try {
+    const { financialYear, month, cropYear, warehouseName, warehouseBranch, billType, warehouseType, fromDate, toDate } = req.query;
+
+    const data = await reportService.getAdvisoryPayments({
+      financialYear,
+      month,
+      cropYear,
+      warehouseName,
+      warehouseBranch,
+      billType,
+      warehouseType,
+      fromDate,
+      toDate,
+    });
+
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
   }
 };
 

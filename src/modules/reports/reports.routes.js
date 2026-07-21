@@ -6,6 +6,10 @@ const verifyToken = require("../../middlewares/auth.middleware")
 router.get("/financial-years", controller.getFinancialYears);
 router.get("/filters", controller.getFilters);
 router.get("/preview", controller.previewReport);
+
+/* Advisory (reuses payments data source with advisory-specific output) */
+router.get("/advisory/filters", controller.getAdvisoryFilters);
+router.get("/advisory/preview", controller.previewAdvisory);
 router.post("/generate", controller.generateReport);
 router.get("/", controller.getReports);
 router.get("/download", verifyToken, controller.downloadReport);
